@@ -16,14 +16,15 @@ import com.spdev22.mycare.data.AppGroup
 import com.spdev22.mycare.data.GroupStore
 import com.spdev22.mycare.engine.WorkflowEngine
 import com.spdev22.mycare.service.CareService
+import com.spdev22.mycare.settings.SettingsActivity
 import com.spdev22.mycare.setup.SetupWizardActivity
 import com.spdev22.mycare.ui.WorkflowListActivity
 
 /**
- * Main screen — Phase 1:
+ * Main screen:
  * App Groups ki list + naya group banana (D1),
- * Setup Wizard aur Workflow Pack ke raaste,
- * aur Care Service (stub) chalu karne ka button.
+ * Setup Wizard, Workflow Pack aur Settings ke raaste,
+ * aur Care Service (live engine) chalu karna.
  */
 class MainActivity : Activity() {
 
@@ -47,7 +48,8 @@ class MainActivity : Activity() {
 
         val subtitle = TextView(this).apply {
             text = "Jo aapke phone ka aur aapka — dono ka khayal rakhe.\n" +
-                "Phase 1: setup skeleton (workflows Phase 2 me zinda honge)"
+                "Phase 2: core workflows zinda hain — Welcome Boss, Boredom " +
+                "Dost, Rest Nudge, Suggestions aur Aaj Ka Hisaab."
             setPadding(0, 8, 0, 16)
         }
         root.addView(subtitle)
@@ -85,10 +87,16 @@ class MainActivity : Activity() {
         }
         root.addView(packBtn)
 
-        val serviceBtn = Button(this).apply { text = "Care Service chalu karo (stub)" }
+        val settingsBtn = Button(this).apply { text = "Settings — Time aur Limits" }
+        settingsBtn.setOnClickListener {
+            startActivity(Intent(this, SettingsActivity::class.java))
+        }
+        root.addView(settingsBtn)
+
+        val serviceBtn = Button(this).apply { text = "Care Service chalu karo" }
         serviceBtn.setOnClickListener {
             CareService.start(this)
-            toast("Care Service chalu ho gaya (abhi sirf stub hai)")
+            toast("Care Service chalu ho gaya — triggers live hain")
         }
         root.addView(serviceBtn)
 
@@ -113,6 +121,8 @@ class MainActivity : Activity() {
         setContentView(root)
         refreshGroups()
         refreshStatus()
+        // App khulte hi engine zinda kar do (idempotent)
+        CareService.start(this)
     }
 
     override fun onResume() {

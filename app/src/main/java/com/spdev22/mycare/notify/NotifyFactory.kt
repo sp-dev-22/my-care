@@ -1,0 +1,210 @@
+package com.spdev22.mycare.notify
+
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.app.RemoteInput
+import android.content.Context
+import android.content.Intent
+import android.os.Build
+import com.spdev22.mycare.MainActivity
+import com.spdev22.mycare.engine.WfButton
+import com.spdev22.mycare.engine.Workflow
+import com.spdev22.mycare.ui.TrampolineActivity
+
+/**
+ * NotifyFactory — Workflow Format v1 se asli notifications banata hai.
+ *
+ * Saare button PendingIntents TrampolineActivity ko jaate hain (activity
+ * PendingIntent = user ke tap se activity-start ki poori ijaazat milti
+ * hai, background se bhi). RemoteInput wala PendingIntent bhi wahi
+ * jaata hai — bas woh MUTABLE hota hai taaki system title bhar sake.
+ */
+object NotifyFactory {
+
+    const val CHANNEL_ID = "care_suggestions"
+
+    const val EXTRA_WF = "extra_wf"
+    const val EXTRA_NOTIF = "extra_notif"
+    const val EXTRA_ACTION = "extra_action"
+    const val EXTRA_ARGS = "extra_args"
+
+    const val KEY_ALARM_TITLE = "alarm_title"
+
+    fun ensureChannel(context: Context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val manager = context.getSystemService(NotificationManager::class.java)
+            if (manager?.getNotificationChannel(CHANNEL_ID) == null) {
+                val channel = NotificationChannel(
+                    CHANNEL_ID,
+                    "Care Suggestions",
+                    NotificationManager.IMPORTANCE_DEFAULT
+                )
+                channel.description = "My Care ke care suggestions aur workflows"
+                manager?.createNotificationChannel(channel)
+            }
+        }
+    }
+
+    fun notifIdFor(workflowId: String): Int =
+        2000 + ((workflowId.hashCode() and 0x7fffffff) % 4000)
+
+    /** {app} {minutes} {percent} {hisaab} jaise variables bharo. */
+    fun applyVars(text: String, vars: Map<String, String>): String {
+        var out = text
+        for ((k, v) in vars) out = out.replace("{$k}", v)
+        return out
+    }
+
+    fun postWorkflow(
+        context: Context,
+        wf: Workflow,
+        vars: Map<String, String> = emptyMap()
+    ) {
+        ensureChannel(context)
+        val notifId = notifIdFor(wf.id)
+        val title = applyVars(wf.title, vars)
+        val text = applyVars(wf.text, vars)
+
+        val contentIntent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        }
+        val contentPi = PendingIntent.getActivity(
+            context, notifId, contentIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val builder = newBuilder(context)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setStyle(Notification.BigTextStyle().bigText(text))
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentIntent(contentPi)
+            .setAutoCancel(true)
+
+        for ((index, btn) in wf.buttons.take(3).withIndex()) {
+            builder.addAction(
+                Notification.Action.Builder(
+                    iconFor(btn.action), btn.label,
+                    trampolineIntent(context, wf.id, notifId, btn, index)
+                ).build()
+            )
+        }
+
+        manager(context)?.notify(notifId, builder.build())
+    }
+
+    /**
+     * Alarm Suggestion ka doosra step: title likhne wali notification.
+     * User title bhejega to TrampolineActivity alarm laga degi.
+     */
+    fun postAlarmInput(context: Context, wf: Workflow) {
+        ensureChannel(context)
+        val notifId = notifIdFor(wf.id) + 1
+
+        val remoteInput = RemoteInput.Builder(KEY_ALARM_TITLE)
+            .setLabel("Alarm ka title likhiye — time chahiye to 7:30 bhi jod dein")
+            .build()
+
+        val intent = Intent(context, TrampolineActivity::class.java).apply {
+            action = "com.spdev22.mycare.TRAMP_" + notifId + "_input"
+            putExtra(EXTRA_WF, wf.id)
+            putExtra(EXTRA_NOTIF, notifId)
+            putExtra(EXTRA_ACTION, "alarm_submit")
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        }
+        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
+        } else {
+            PendingIntent.FLAG_UPDATE_CURRENT
+        }
+        val pi = PendingIntent.getActivity(context, notifId, intent, flags)
+
+        val action = Notification.Action.Builder(
+            android.R.drawable.ic_input_add, "Title bhejo", pi
+        ).addRemoteInput(remoteInput).build()
+
+        val notification = newBuilder(context)
+            .setContentTitle("Alarm ka title? ⏰")
+            .setContentText("Neeche box me title likhkar bhejo, Boss. Sirf time " +
+                "chahiye to khali title bhi chalega — subah 6:00 ka alarm lagega.")
+            .setStyle(
+                Notification.BigTextStyle().bigText(
+                    "Title likhiye — jaise \"Gym jaana hai\". Agar alarm ka time " +
+                        "6:00 se alag chahiye to saath me time bhi likh dein, " +
+                        "jaise \"Gym 7:30\"."
+                )
+            )
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .addAction(action)
+            .setAutoCancel(true)
+            .build()
+
+        manager(context)?.notify(notifId, notification)
+    }
+
+    /** Chhoti si plain notification — confirmation ya jaankari ke liye. */
+    fun postPlain(context: Context, id: Int, title: String, text: String) {
+        ensureChannel(context)
+        val notification = newBuilder(context)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setStyle(Notification.BigTextStyle().bigText(text))
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setAutoCancel(true)
+            .build()
+        manager(context)?.notify(id, notification)
+    }
+
+    fun cancel(context: Context, notifId: Int) {
+        manager(context)?.cancel(notifId)
+    }
+
+    private fun trampolineIntent(
+        context: Context,
+        workflowId: String,
+        notifId: Int,
+        btn: WfButton,
+        index: Int
+    ): PendingIntent {
+        val intent = Intent(context, TrampolineActivity::class.java).apply {
+            action = "com.spdev22.mycare.TRAMP_" + notifId + "_" + index
+            putExtra(EXTRA_WF, workflowId)
+            putExtra(EXTRA_NOTIF, notifId)
+            putExtra(EXTRA_ACTION, btn.action)
+            if (btn.args.isNotEmpty()) {
+                val obj = org.json.JSONObject()
+                for ((k, v) in btn.args) obj.put(k, v)
+                putExtra(EXTRA_ARGS, obj.toString())
+            }
+            if (btn.next != null) putExtra("extra_next", btn.next)
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        }
+        return PendingIntent.getActivity(
+            context, notifId * 10 + index, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+    }
+
+    private fun iconFor(action: String): Int = when (action) {
+        "lock_phone" -> android.R.drawable.ic_lock_idle_lock
+        "open_app" -> android.R.drawable.ic_media_play
+        "skip" -> android.R.drawable.ic_menu_close_clear_cancel
+        "alarm_input" -> android.R.drawable.ic_input_add
+        "go_home" -> android.R.drawable.ic_menu_view
+        else -> android.R.drawable.ic_dialog_info
+    }
+
+    private fun newBuilder(context: Context): Notification.Builder {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            Notification.Builder(context, CHANNEL_ID)
+        } else {
+            @Suppress("DEPRECATION")
+            Notification.Builder(context)
+        }
+    }
+
+    private fun manager(context: Context): NotificationManager? =
+        context.getSystemService(NotificationManager::class.java)
+}

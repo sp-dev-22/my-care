@@ -136,8 +136,10 @@ class SetupWizardActivity : Activity() {
         },
         PermItem(
             "5. Accessibility",
-            "Close App jaise actions ke liye (Phase 2 me lagega). Is se app " +
-                "screen par tap/back jaise kaam kar pata hai."
+            "Close App button ke liye — is se My Care seedha Home screen " +
+                "par bhej pata hai. Settings me 'Installed services' ke " +
+                "andar 'My Care' naam se service milegi — use ON karna hoga. " +
+                "Note: yeh service screen ka content nahi padhti."
         ) { a ->
             a.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
         },

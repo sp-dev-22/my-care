@@ -6,8 +6,9 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * WorkflowEngine — Phase 1 me sirf pack PARSING hai.
- * Triggers fire karna, notifications dikhana Phase 2 ka kaam hai.
+ * WorkflowEngine — pack ko parse karke Workflow records banata hai.
+ * Phase 2: triggers CareService (usage/time/unlock) aur DailyScheduler
+ * (time-based) se fire hote hain; notifications NotifyFactory banata hai.
  *
  * Pack ek ready-made data file hai (D9): naye workflows nayi pack file se
  * aayenge, app dobara banane ki zaroorat nahi padegi.
@@ -61,11 +62,23 @@ object WorkflowEngine {
             }
         }
 
+        val triggerParams = mutableMapOf<String, String>()
+        if (trigger != null) {
+            val tKeys = trigger.keys()
+            while (tKeys.hasNext()) {
+                val k = tKeys.next()
+                if (k != "type") {
+                    triggerParams[k] = trigger.opt(k)?.toString() ?: ""
+                }
+            }
+        }
+
         return Workflow(
             id = obj.optString("id"),
             name = obj.optString("name", obj.optString("id")),
             enabled = obj.optBoolean("enabled", true),
             triggerType = trigger?.optString("type", "unknown") ?: "unknown",
+            triggerParams = triggerParams,
             botType = obj.optString("bot_type", "notification"),
             title = message?.optString("title") ?: "",
             text = message?.optString("text") ?: "",

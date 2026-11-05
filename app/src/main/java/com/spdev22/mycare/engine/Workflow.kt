@@ -25,6 +25,8 @@ data class Workflow(
     val name: String,
     val enabled: Boolean,
     val triggerType: String,
+    /** Trigger ke baaki saare params (type chhod kar) — jaise time, minutes, apps */
+    val triggerParams: Map<String, String> = emptyMap(),
     val botType: String,
     val title: String,
     val text: String,

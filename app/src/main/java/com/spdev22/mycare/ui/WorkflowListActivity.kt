@@ -30,7 +30,7 @@ class WorkflowListActivity : Activity() {
             textSize = 20f
         })
         root.addView(TextView(this).apply {
-            text = "Phase 1: pack sirf parse hota hai — triggers Phase 2 me fire honge."
+            text = "Phase 2: core workflows (1–7) live hain — baaki Phase 3 me fire honge. Kisi workflow par tap karke uska sandesh dekho."
             setPadding(0, 8, 0, 16)
         })
 

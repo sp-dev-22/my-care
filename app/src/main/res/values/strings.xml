@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">My Care</string>
+    <string name="accessibility_service_label">My Care</string>
+    <string name="accessibility_service_description">My Care ko Close App jaise actions ke liye Home jaane ki aur foreground app pehchanne ki ijaazat chahiye. Yeh service screen ka content NAHI padhti.</string>
 </resources>
