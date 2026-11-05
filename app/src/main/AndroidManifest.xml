@@ -42,6 +42,9 @@
         <activity
             android:name=".ui.WorkflowListActivity"
             android:exported="false" />
+        <activity
+            android:name=".ui.WorkflowEditActivity"
+            android:exported="false" />
 
         <activity
             android:name=".setup.SetupWizardActivity"

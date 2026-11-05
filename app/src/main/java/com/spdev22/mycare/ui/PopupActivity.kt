@@ -10,6 +10,7 @@ import android.widget.TextView
 import android.widget.Toast
 import com.spdev22.mycare.data.GroupStore
 import com.spdev22.mycare.data.LogStore
+import com.spdev22.mycare.data.WorkflowOverrides
 import com.spdev22.mycare.engine.WorkflowEngine
 import com.spdev22.mycare.notify.NotifyFactory
 
@@ -48,11 +49,13 @@ class PopupActivity : Activity() {
 
     private fun buildWorkflow(root: LinearLayout) {
         val wfId = intent.getStringExtra(EXTRA_WF) ?: ""
-        val wf = WorkflowEngine.loadPack(this).firstOrNull { it.id == wfId }
-        if (wf == null) {
+        val packWf = WorkflowEngine.loadPack(this).firstOrNull { it.id == wfId }
+        if (packWf == null) {
             finish()
             return
         }
+        // 0.2.3: popup me bhi Editor-lite ke edited title/text dikhne chahiye
+        val wf = WorkflowOverrides.effective(this, packWf)
         root.addView(TextView(this).apply {
             text = wf.title
             textSize = 19f

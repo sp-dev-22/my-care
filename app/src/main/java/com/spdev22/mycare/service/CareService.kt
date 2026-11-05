@@ -24,6 +24,7 @@ import android.provider.MediaStore
 import android.util.Log
 import com.spdev22.mycare.data.CareSettings
 import com.spdev22.mycare.data.LogStore
+import com.spdev22.mycare.data.WorkflowOverrides
 import com.spdev22.mycare.data.WorkflowPrefs
 import com.spdev22.mycare.engine.CareChecks
 import com.spdev22.mycare.engine.HisaabBuilder
@@ -137,7 +138,10 @@ class CareService : Service() {
         val now = System.currentTimeMillis()
         val usageOk = t.poll() // Usage Access nahi to usage triggers band, baaki chalte rahenge
         val batt = batteryInfo()
-        for (wf in pack) {
+        for (packWf in pack) {
+            // 0.2.3: Editor-lite overrides lagu karke effective
+            // workflow banao — saare limits/message yahi se milenge
+            val wf = WorkflowOverrides.effective(this, packWf)
             // 0.2.2: user ka on/off toggle hi final — OFF workflow kabhi fire nahi
             if (!WorkflowPrefs.isEnabled(this, wf)) continue
             when (wf.triggerType) {
@@ -216,13 +220,19 @@ class CareService : Service() {
         Log.i(TAG, "Rest Nudge fire: stretch ${(stretchMs / 60_000L)}m")
     }
 
-    /** User setting (agar badli ho) > pack param > plan default. */
+    /**
+     * User setting (agar badli ho) > pack param > plan default.
+     * 0.2.3: sabse pehle Editor-lite ka per-workflow override —
+     * yeh is workflow ke liye user ki sabse khaas pasand hai.
+     */
     private fun settingInt(
         wf: Workflow,
         userKey: String,
         paramKey: String,
         default: Int
     ): Int {
+        WorkflowOverrides.overrideValue(this, wf.id, paramKey)
+            ?.toIntOrNull()?.let { return it }
         val fallback = wf.triggerParams[paramKey]?.toIntOrNull()
             ?: wf.settings[paramKey]?.toIntOrNull()
             ?: default
@@ -233,11 +243,13 @@ class CareService : Service() {
 
     private fun evalInterval(wf: Workflow, now: Long) {
         val hours = if (wf.id == "paani_reminder") {
-            CareSettings.intVal(
-                this, CareSettings.KEY_PAANI_HOURS,
-                wf.triggerParams["hours"]?.toIntOrNull()
-                    ?: CareSettings.DEFAULT_PAANI_HOURS
-            )
+            // 0.2.3: Editor-lite override > Settings wala ghanta > pack
+            WorkflowOverrides.overrideValue(this, wf.id, "hours")?.toIntOrNull()
+                ?: CareSettings.intVal(
+                    this, CareSettings.KEY_PAANI_HOURS,
+                    wf.triggerParams["hours"]?.toIntOrNull()
+                        ?: CareSettings.DEFAULT_PAANI_HOURS
+                )
         } else {
             wf.triggerParams["hours"]?.toIntOrNull() ?: 2
         }
@@ -302,9 +314,10 @@ class CareService : Service() {
             }
             "discharging" -> {
                 // Battery Low: user ki setting wala level, 4 ghante cooldown
-                val lowLevel = CareSettings.intVal(
-                    this, CareSettings.KEY_BATTERY_LOW, level
-                )
+                // 0.2.3: Editor-lite ka 'level' override Settings wale % se upar
+                val lowLevel = WorkflowOverrides.overrideValue(this, wf.id, "level")
+                    ?.toIntOrNull()
+                    ?: CareSettings.intVal(this, CareSettings.KEY_BATTERY_LOW, level)
                 if (batt.charging || batt.percent > lowLevel) return
                 val last = CareSettings.stateLong(this, "state_battlow_fired")
                 if (now - last < 4 * 60 * 60_000L) return
@@ -478,6 +491,7 @@ class CareService : Service() {
         lastShotCheckMs = now
         val wf = pack.firstOrNull { it.triggerType == "screenshot_taken" }
             ?.takeIf { WorkflowPrefs.isEnabled(this, it) }
+            ?.let { WorkflowOverrides.effective(this, it) }
             ?: return
         val latest = latestScreenshot() ?: return
         val (id, uri) = latest
@@ -508,6 +522,7 @@ class CareService : Service() {
         lastContactCheckMs = now
         val wf = pack.firstOrNull { it.triggerType == "contact_saved" }
             ?.takeIf { WorkflowPrefs.isEnabled(this, it) }
+            ?.let { WorkflowOverrides.effective(this, it) }
             ?: return
         try {
             contentResolver.query(
@@ -590,6 +605,7 @@ class CareService : Service() {
         if (CareSettings.lastWelcomeDate(this) == today) return
         val wf = pack.firstOrNull { it.triggerType == "first_unlock" }
             ?.takeIf { WorkflowPrefs.isEnabled(this, it) }
+            ?.let { WorkflowOverrides.effective(this, it) }
             ?: return
         NotifyFactory.postWorkflow(this, wf)
         CareSettings.setLastWelcomeDate(this, today)

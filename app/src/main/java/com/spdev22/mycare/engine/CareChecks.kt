@@ -9,6 +9,7 @@ import android.os.Process
 import android.os.storage.StorageManager
 import android.util.Log
 import com.spdev22.mycare.data.CareSettings
+import com.spdev22.mycare.data.WorkflowOverrides
 import com.spdev22.mycare.data.LogStore
 import com.spdev22.mycare.notify.NotifyFactory
 
@@ -41,9 +42,12 @@ object CareChecks {
         }
         CareSettings.setStateLong(context, "state_cache_check", now)
 
-        val thresholdMb = CareSettings.intVal(
-            context, CareSettings.KEY_CACHE_MB, CareSettings.DEFAULT_CACHE_MB
-        )
+        // 0.2.3: Editor-lite ka 'cache_mb' override Settings wali limit se upar
+        val thresholdMb = WorkflowOverrides.overrideValue(context, wf.id, "cache_mb")
+            ?.toIntOrNull()
+            ?: CareSettings.intVal(
+                context, CareSettings.KEY_CACHE_MB, CareSettings.DEFAULT_CACHE_MB
+            )
         val thresholdBytes = thresholdMb.toLong() * 1_000_000L
 
         return try {
@@ -116,8 +120,11 @@ object CareChecks {
         return try {
             val usm = context.getSystemService(Context.USAGE_STATS_SERVICE)
                 as? UsageStatsManager ?: return false
+            // 0.2.3: 'days' limit ab pack settings / Editor-lite override
+            // se aati hai (pehle 30 hardkod tha, pack value padhi hi nahi jati thi)
+            val daysLimit = wf.settings["days"]?.toLongOrNull() ?: 30L
             val stats = usm.queryUsageStats(
-                UsageStatsManager.INTERVAL_BEST, now - 35 * DAY_MS, now
+                UsageStatsManager.INTERVAL_BEST, now - (daysLimit + 5) * DAY_MS, now
             ) ?: return false
             val lastUsed = mutableMapOf<String, Long>()
             for (s in stats) {
@@ -133,7 +140,7 @@ object CareChecks {
                 // services ko "unused" kehna galat hoga
                 if (pm.getLaunchIntentForPackage(app.packageName) == null) continue
                 val used = lastUsed[app.packageName] ?: 0L
-                if (now - used >= 30 * DAY_MS) {
+                if (now - used >= daysLimit * DAY_MS) {
                     candidates.add(app.packageName to used)
                 }
             }

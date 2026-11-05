@@ -1,6 +1,7 @@
 package com.spdev22.mycare.ui
 
 import android.app.Activity
+import android.content.Intent
 import android.os.Bundle
 import android.view.Gravity
 import android.view.ViewGroup
@@ -46,6 +47,8 @@ class WorkflowListActivity : Activity() {
         })
         root.addView(TextView(this).apply {
             text = "Har workflow ko yahan se chalu/band karein, Boss. " +
+                "Kisi workflow par TAP karke uska message, samay aur " +
+                "limits bhi badal sakte hain (Editor-lite). " +
                 "Jo OFF hai woh kabhi fire nahi hoga — roz wale time " +
                 "workflows ka alarm bhi band ho jayega."
             setPadding(0, 8, 0, 16)
@@ -91,7 +94,7 @@ class WorkflowListActivity : Activity() {
         })
         val steps = if (wf.steps.isEmpty()) "" else " • ${wf.steps.size} extra steps"
         texts.addView(TextView(this).apply {
-            text = "trigger: ${wf.triggerType} • bot: ${wf.effectiveBotType}$steps"
+            text = "trigger: ${wf.triggerType} • bot: ${wf.effectiveBotType}$steps • tap = edit ✏️"
             textSize = 13f
         })
         row.addView(texts)
@@ -119,6 +122,16 @@ class WorkflowListActivity : Activity() {
             }
         }
         row.addView(toggle)
+
+        // 0.2.3: puri row (switch ke alaava) tap karne par Editor-lite
+        // khulta hai. Switch apna click khud sambhalta hai — toggle
+        // aur edit aapas me takraate nahi.
+        row.setOnClickListener {
+            startActivity(
+                Intent(this, WorkflowEditActivity::class.java)
+                    .putExtra(WorkflowEditActivity.EXTRA_WF, wf.id)
+            )
+        }
         return row
     }
 }

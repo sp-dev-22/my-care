@@ -10,6 +10,7 @@ import android.content.Intent
 import android.os.Build
 import com.spdev22.mycare.MainActivity
 import com.spdev22.mycare.data.LogStore
+import com.spdev22.mycare.data.WorkflowOverrides
 import com.spdev22.mycare.engine.WfButton
 import com.spdev22.mycare.engine.WfStep
 import com.spdev22.mycare.engine.Workflow
@@ -94,13 +95,18 @@ object NotifyFactory {
         vars: Map<String, String> = emptyMap()
     ) {
         ensureChannel(context)
+        // 0.2.3: Editor-lite overrides — caller ne raw pack workflow
+        // diya ho tab bhi notification me edited title/text hi jayenge.
+        // (Buttons effective() nahi badalta, isliye runtime par bane
+        // khaas buttons — jaise contact ka WhatsApp button — bache rehte hain.)
+        val eff = WorkflowOverrides.effective(context, wf)
         val notifId = notifIdFor(wf.id)
-        val title = applyVars(wf.title, vars)
-        val text = applyVars(wf.text, vars)
+        val title = applyVars(eff.title, vars)
+        val text = applyVars(eff.text, vars)
 
         // Popup bot type: notification par tap popup kholta hai,
         // jahan 3 se zyada buttons bhi mil sakte hain (D7).
-        val contentTarget = if (wf.effectiveBotType == "popup") {
+        val contentTarget = if (eff.effectiveBotType == "popup") {
             Intent(context, PopupActivity::class.java).apply {
                 putExtra(PopupActivity.EXTRA_MODE, "workflow")
                 putExtra(PopupActivity.EXTRA_WF, wf.id)
@@ -124,7 +130,7 @@ object NotifyFactory {
             .setContentIntent(contentPi)
             .setAutoCancel(true)
 
-        for ((index, btn) in wf.buttons.take(3).withIndex()) {
+        for ((index, btn) in eff.buttons.take(3).withIndex()) {
             builder.addAction(
                 Notification.Action.Builder(
                     iconFor(btn.action), btn.label,

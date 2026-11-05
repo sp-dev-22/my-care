@@ -7,6 +7,7 @@ import android.content.Intent
 import android.os.Build
 import android.util.Log
 import com.spdev22.mycare.data.CareSettings
+import com.spdev22.mycare.data.WorkflowOverrides
 import com.spdev22.mycare.data.WorkflowPrefs
 import com.spdev22.mycare.engine.Workflow
 import com.spdev22.mycare.engine.WorkflowEngine
@@ -78,8 +79,13 @@ object DailyScheduler {
         pi.cancel()
     }
 
-    /** Workflow ka effective "HH:MM" — user setting > pack trigger param > default. */
+    /**
+     * Workflow ka effective "HH:MM" — pehle Editor-lite ka
+     * per-workflow time override (0.2.3), phir user ki Settings
+     * value (trigger ka settings_key), phir pack ka time.
+     */
     fun resolveTime(context: Context, wf: Workflow): String {
+        WorkflowOverrides.timeOverride(context, wf.id)?.let { return it }
         val settingsKey = wf.triggerParams["settings_key"]
         val packTime = wf.triggerParams["time"] ?: "08:00"
         return if (settingsKey != null) {
