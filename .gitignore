@@ -10,3 +10,5 @@ local.properties
 gradle/wrapper/gradle-wrapper.jar
 # Decode hue launcher PNG (icon-b64/ se bante hain, source nahi hain)
 app/src/main/res/mipmap-*/ic_launcher*.png
+# Decode hua signing keystore (signing/*.b64 se banta hai, source nahi hai)
+signing/*.p12

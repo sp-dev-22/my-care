@@ -9,8 +9,11 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import com.spdev22.mycare.MainActivity
+import com.spdev22.mycare.data.LogStore
 import com.spdev22.mycare.engine.WfButton
+import com.spdev22.mycare.engine.WfStep
 import com.spdev22.mycare.engine.Workflow
+import com.spdev22.mycare.ui.PopupActivity
 import com.spdev22.mycare.ui.TrampolineActivity
 
 /**
@@ -20,6 +23,11 @@ import com.spdev22.mycare.ui.TrampolineActivity
  * PendingIntent = user ke tap se activity-start ki poori ijaazat milti
  * hai, background se bhi). RemoteInput wala PendingIntent bhi wahi
  * jaata hai — bas woh MUTABLE hota hai taaki system title bhar sake.
+ *
+ * Phase 3 jod: popup bot type (D7) — workflow popup ho to notification
+ * par tap PopupActivity kholta hai jahan saare buttons milte hain;
+ * multi-step flows ke liye postStep; ek-button wali plain suchna ke
+ * liye postActionPlain; aur har fire ka LogStore me record.
  */
 object NotifyFactory {
 
@@ -57,6 +65,29 @@ object NotifyFactory {
         return out
     }
 
+    /** Ek button ke liye TrampolineActivity ka Intent (Popup bhi yahi use karta hai). */
+    fun buttonIntent(
+        context: Context,
+        workflowId: String,
+        notifId: Int,
+        btn: WfButton,
+        index: Int
+    ): Intent {
+        return Intent(context, TrampolineActivity::class.java).apply {
+            action = "com.spdev22.mycare.TRAMP_" + notifId + "_" + index
+            putExtra(EXTRA_WF, workflowId)
+            putExtra(EXTRA_NOTIF, notifId)
+            putExtra(EXTRA_ACTION, btn.action)
+            if (btn.args.isNotEmpty()) {
+                val obj = org.json.JSONObject()
+                for ((k, v) in btn.args) obj.put(k, v)
+                putExtra(EXTRA_ARGS, obj.toString())
+            }
+            if (btn.next != null) putExtra("extra_next", btn.next)
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        }
+    }
+
     fun postWorkflow(
         context: Context,
         wf: Workflow,
@@ -67,11 +98,21 @@ object NotifyFactory {
         val title = applyVars(wf.title, vars)
         val text = applyVars(wf.text, vars)
 
-        val contentIntent = Intent(context, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        // Popup bot type: notification par tap popup kholta hai,
+        // jahan 3 se zyada buttons bhi mil sakte hain (D7).
+        val contentTarget = if (wf.effectiveBotType == "popup") {
+            Intent(context, PopupActivity::class.java).apply {
+                putExtra(PopupActivity.EXTRA_MODE, "workflow")
+                putExtra(PopupActivity.EXTRA_WF, wf.id)
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+        } else {
+            Intent(context, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+            }
         }
         val contentPi = PendingIntent.getActivity(
-            context, notifId, contentIntent,
+            context, notifId, contentTarget,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
@@ -93,6 +134,48 @@ object NotifyFactory {
         }
 
         manager(context)?.notify(notifId, builder.build())
+        LogStore.log(context, "FIRE ${wf.id} — $title")
+    }
+
+    /** Multi-step flow ka agla step ek nayi notification ke roop me. */
+    fun postStep(
+        context: Context,
+        wf: Workflow,
+        step: WfStep,
+        vars: Map<String, String> = emptyMap()
+    ) {
+        ensureChannel(context)
+        val notifId = notifIdFor(wf.id) + 500
+        val title = applyVars(step.title, vars)
+        val text = applyVars(step.text, vars)
+
+        val contentIntent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        }
+        val contentPi = PendingIntent.getActivity(
+            context, notifId, contentIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val builder = newBuilder(context)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setStyle(Notification.BigTextStyle().bigText(text))
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentIntent(contentPi)
+            .setAutoCancel(true)
+
+        for ((index, btn) in step.buttons.take(3).withIndex()) {
+            builder.addAction(
+                Notification.Action.Builder(
+                    iconFor(btn.action), btn.label,
+                    trampolineIntent(context, wf.id, notifId, btn, index)
+                ).build()
+            )
+        }
+
+        manager(context)?.notify(notifId, builder.build())
+        LogStore.log(context, "STEP ${wf.id} → ${step.id} — $title")
     }
 
     /**
@@ -157,6 +240,67 @@ object NotifyFactory {
         manager(context)?.notify(id, notification)
     }
 
+    /** Plain notification + ek Trampoline button (jaise delete confirm). */
+    fun postActionPlain(
+        context: Context,
+        id: Int,
+        title: String,
+        text: String,
+        actionLabel: String,
+        action: String,
+        workflowId: String
+    ) {
+        ensureChannel(context)
+        val btn = WfButton(actionLabel, action)
+        val builder = newBuilder(context)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setStyle(Notification.BigTextStyle().bigText(text))
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setAutoCancel(true)
+        builder.addAction(
+            Notification.Action.Builder(
+                iconFor(action), actionLabel,
+                trampolineIntent(context, workflowId, id, btn, 0)
+            ).build()
+        )
+        manager(context)?.notify(id, builder.build())
+        LogStore.log(context, "ACTION-NOTIF $workflowId — $title")
+    }
+
+    /** Notification jispar tap karte hi assign-group popup khulta hai. */
+    fun postPopupLauncher(
+        context: Context,
+        id: Int,
+        title: String,
+        text: String,
+        pkg: String,
+        label: String,
+        workflowId: String
+    ) {
+        ensureChannel(context)
+        val popupIntent = Intent(context, PopupActivity::class.java).apply {
+            putExtra(PopupActivity.EXTRA_MODE, "assign_group")
+            putExtra(PopupActivity.EXTRA_PKG, pkg)
+            putExtra(PopupActivity.EXTRA_LABEL, label)
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        }
+        val contentPi = PendingIntent.getActivity(
+            context, id, popupIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val notification = newBuilder(context)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setStyle(Notification.BigTextStyle().bigText(text))
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentIntent(contentPi)
+            .setAutoCancel(true)
+            .build()
+        manager(context)?.notify(id, notification)
+        LogStore.log(context, "POPUP-LAUNCH $workflowId — $pkg")
+    }
+
     fun cancel(context: Context, notifId: Int) {
         manager(context)?.cancel(notifId)
     }
@@ -168,21 +312,9 @@ object NotifyFactory {
         btn: WfButton,
         index: Int
     ): PendingIntent {
-        val intent = Intent(context, TrampolineActivity::class.java).apply {
-            action = "com.spdev22.mycare.TRAMP_" + notifId + "_" + index
-            putExtra(EXTRA_WF, workflowId)
-            putExtra(EXTRA_NOTIF, notifId)
-            putExtra(EXTRA_ACTION, btn.action)
-            if (btn.args.isNotEmpty()) {
-                val obj = org.json.JSONObject()
-                for ((k, v) in btn.args) obj.put(k, v)
-                putExtra(EXTRA_ARGS, obj.toString())
-            }
-            if (btn.next != null) putExtra("extra_next", btn.next)
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK
-        }
         return PendingIntent.getActivity(
-            context, notifId * 10 + index, intent,
+            context, notifId * 10 + index,
+            buttonIntent(context, workflowId, notifId, btn, index),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
     }

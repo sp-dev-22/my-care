@@ -25,6 +25,9 @@ object CareSettings {
     const val KEY_BOREDOM_APPS = "set_boredom_apps"
     const val KEY_BOREDOM_SECONDS = "set_boredom_seconds"
     const val KEY_WELCOME_ENABLED = "set_welcome_enabled"
+    const val KEY_PAANI_HOURS = "set_paani_hours"
+    const val KEY_BATTERY_LOW = "set_battery_low"
+    const val KEY_CACHE_MB = "set_cache_mb"
 
     // ---- plan wale defaults ----
     const val DEFAULT_STUDY_TIME = "08:00"
@@ -34,6 +37,9 @@ object CareSettings {
     const val DEFAULT_REST_MINUTES = 25
     const val DEFAULT_BOREDOM_APPS = 3
     const val DEFAULT_BOREDOM_SECONDS = 10
+    const val DEFAULT_PAANI_HOURS = 2
+    const val DEFAULT_BATTERY_LOW = 20
+    const val DEFAULT_CACHE_MB = 500
 
     private fun prefs(context: Context) =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -105,5 +111,34 @@ object CareSettings {
 
     fun setLongAppFiredKey(context: Context, key: String) {
         prefs(context).edit().putString("state_longapp_fired_key", key).apply()
+    }
+
+    // ---------- generic engine state (Phase 3 ke naye triggers ke liye) ----------
+
+    fun stateLong(context: Context, key: String, default: Long = 0L): Long =
+        prefs(context).getLong(key, default)
+
+    fun setStateLong(context: Context, key: String, value: Long) {
+        prefs(context).edit().putLong(key, value).apply()
+    }
+
+    fun stateStr(context: Context, key: String): String? =
+        prefs(context).getString(key, null)
+
+    fun setStateStr(context: Context, key: String, value: String) {
+        prefs(context).edit().putString(key, value).apply()
+    }
+
+    // ---------- action-target apps (2.1 ka app picker) ----------
+    // Slot naam: "music", "video", "chat" — user ne app chuna ho to
+    // wahi khulega, warna pack ke default candidates chalenge.
+
+    fun targetApp(context: Context, slot: String): String? =
+        prefs(context).getString("target_$slot", null)
+
+    fun setTargetApp(context: Context, slot: String, pkg: String?) {
+        val edit = prefs(context).edit()
+        if (pkg == null) edit.remove("target_$slot") else edit.putString("target_$slot", pkg)
+        edit.apply()
     }
 }

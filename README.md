@@ -10,23 +10,32 @@ action buttons, multi-step flows, aur notification ke andar hi input
 **Target device:** Infinix Smart 7 HD (Android 12 Go, 32-bit, 2 GB RAM) —
 isi liye APK sirf `armeabi-v7a` ke liye banta hai aur design bilkul halka hai.
 
-## Status: Phase 1 — Engine scaffold (2026-11-05)
+## Status: v0.3.0 — Phase 3 COMPLETE (saare 16 workflows LIVE)
 
 Ho gaya hai:
 - Android project (Kotlin, package `com.spdev22.mycare`, minSdk 24)
-- **App Groups** screen — groups banao, SharedPreferences/JSON me save (D1)
-- **WorkflowEngine** — Workflow Format v1 ke records parse karta hai
-  (`app/src/main/assets/workflows/pack_v1.json` me 2 sample workflows)
-- **CareService** — foreground service ka stub
+- **App Groups** screen — groups banao, group par tap karke App Picker
+  se apps jodo/hato (D1)
+- **WorkflowEngine + Pack v3** — Workflow Format v1 ke **16 workflows**
+  (`app/src/main/assets/workflows/pack_v1.json`)
+- **CareService** — live trigger engine: usage, unlock, battery,
+  interval, screenshot/contact observers, naya-app poll-diff,
+  cache/unused checks
 - **Setup Wizard** — D11 ki saari permissions, ek-ek karke, Hinglish wajah ke saath
+- **2.1 jod:** Action-target **App Picker** (Music/Video/Chat buttons ke
+  liye app chuno), **Logs/Console** screen, **Signing keystore pin**
+  (har build ek hi signature — install-over chalega; v0.3 ke liye ek
+  aakhiri uninstall→install lagega)
+- **Popup bot type (D7)** — Boredom Dost (4 buttons) aur Naya App→Group
 - GitHub Actions se debug APK build
 
-Abhi nahi hai (aane wale phases):
-- Phase 2: core workflows 1–7 (Welcome Boss, Boredom Dost, Rest Nudge,
-  Long-App Suggestion, Study/Alarm Suggestion, Aaj Ka Hisaab, Paani)
-- Phase 3: care workflows 8–16 (Battery, Screenshot Safai, Contact→WhatsApp,
-  Naya App→Group, Cache Safai, Ghuspaithiya Alert, Unused Apps)
-- Phase 4: on-device test + fixes
+Workflows: Welcome Boss, Boredom Dost, Rest Nudge, Long-App Suggestion,
+Study Suggestion, Alarm Suggestion, Aaj Ka Hisaab (D5 7-din pattern ke
+saath), Paani Reminder, Battery Full Alarm, Battery Low Warning,
+Screenshot Safai, Contact→WhatsApp, Naya App→Group, Cache Safai,
+Ghuspaithiya Alert, Unused Apps Safai.
+
+Baaki: sirf Phase 4 — on-device test + jo mile uske fixes.
 
 ## Design ke bade faisle
 

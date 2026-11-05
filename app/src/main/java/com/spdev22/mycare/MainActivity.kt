@@ -18,6 +18,8 @@ import com.spdev22.mycare.engine.WorkflowEngine
 import com.spdev22.mycare.service.CareService
 import com.spdev22.mycare.settings.SettingsActivity
 import com.spdev22.mycare.setup.SetupWizardActivity
+import com.spdev22.mycare.ui.AppPickerActivity
+import com.spdev22.mycare.ui.LogsActivity
 import com.spdev22.mycare.ui.WorkflowListActivity
 
 /**
@@ -48,8 +50,9 @@ class MainActivity : Activity() {
 
         val subtitle = TextView(this).apply {
             text = "Jo aapke phone ka aur aapka — dono ka khayal rakhe.\n" +
-                "Phase 2: core workflows zinda hain — Welcome Boss, Boredom " +
-                "Dost, Rest Nudge, Suggestions aur Aaj Ka Hisaab."
+                "v0.3: saare 16 workflows zinda hain — core care, battery, " +
+                "screenshot, contact, cache, ghuspaithiya aur popup ke saath. " +
+                "Group par tap karke uske apps chunein."
             setPadding(0, 8, 0, 16)
         }
         root.addView(subtitle)
@@ -93,6 +96,12 @@ class MainActivity : Activity() {
         }
         root.addView(settingsBtn)
 
+        val logsBtn = Button(this).apply { text = "Logs / Console" }
+        logsBtn.setOnClickListener {
+            startActivity(Intent(this, LogsActivity::class.java))
+        }
+        root.addView(logsBtn)
+
         val serviceBtn = Button(this).apply { text = "Care Service chalu karo" }
         serviceBtn.setOnClickListener {
             CareService.start(this)
@@ -102,7 +111,11 @@ class MainActivity : Activity() {
 
         groupListView.setOnItemClickListener { _, _, position, _ ->
             val g = groups[position]
-            toast("'${g.name}' — apps jodna agle step me aayega")
+            startActivity(
+                Intent(this, AppPickerActivity::class.java)
+                    .putExtra(AppPickerActivity.EXTRA_MODE, "group")
+                    .putExtra(AppPickerActivity.EXTRA_GROUP, g.name)
+            )
         }
         groupListView.setOnItemLongClickListener { _, _, position, _ ->
             val g = groups[position]

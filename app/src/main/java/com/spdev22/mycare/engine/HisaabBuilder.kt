@@ -73,7 +73,56 @@ object HisaabBuilder {
                 sb.append("Kal padhai ko thoda aage rakhte hain, Boss. 💪")
             }
         }
+
+        // D5 pattern-finding (halka, on-device): pichhle 7 din ka pattern
+        val pattern = weeklyPattern(context)
+        if (pattern.isNotEmpty()) {
+            sb.append(" ").append(pattern)
+        }
         return sb.toString().trim()
+    }
+
+    /**
+     * Pichhle 7 din ka simple pattern (D5 ki pehli seedhi):
+     * roz ka average phone-time aur hafte ka sabse zyada chala app.
+     * Koi cloud/AI nahi — sirf UsageStats ke jod-ghataao.
+     */
+    private fun weeklyPattern(context: Context): String {
+        return try {
+            val usm = context.getSystemService(Context.USAGE_STATS_SERVICE)
+                as? UsageStatsManager ?: return ""
+            val now = System.currentTimeMillis()
+            val stats = usm.queryUsageStats(
+                UsageStatsManager.INTERVAL_BEST, now - 7 * 24 * 60 * 60_000L, now
+            ) ?: return ""
+            if (stats.isEmpty()) return ""
+            var totalMs = 0L
+            val perPkg = mutableMapOf<String, Long>()
+            for (s in stats) {
+                if (s.packageName == context.packageName) continue
+                if (s.totalTimeInForeground <= 0) continue
+                totalMs += s.totalTimeInForeground
+                perPkg[s.packageName] =
+                    (perPkg[s.packageName] ?: 0L) + s.totalTimeInForeground
+            }
+            if (totalMs <= 0) return ""
+            val avgPerDay = totalMs / 7
+            val sb = StringBuilder()
+            sb.append("Pattern (7 din): roz average phone ~")
+                .append(fmt(avgPerDay)).append(".")
+            val top = perPkg.maxByOrNull { it.value }
+            if (top != null) {
+                sb.append(" Is hafte sabse zyada: ")
+                    .append(appLabel(context, top.key))
+                    .append(" (").append(fmt(top.value)).append(").")
+            }
+            if (avgPerDay > 5 * 60 * 60_000L) {
+                sb.append(" Average zyada hai, Boss — kal thoda kam rakhte hain.")
+            }
+            sb.toString()
+        } catch (e: Exception) {
+            ""
+        }
     }
 
     /** Aaj subah 00:00 se ab tak ke per-app foreground totals (ms). */

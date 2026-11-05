@@ -47,6 +47,22 @@
             android:name=".settings.SettingsActivity"
             android:exported="false" />
 
+        <!-- 2.1: Logs/Console aur App Picker -->
+        <activity
+            android:name=".ui.LogsActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".ui.AppPickerActivity"
+            android:exported="false" />
+
+        <!-- D7: Popup bot type — dialog-style window, overlay nahi -->
+        <activity
+            android:name=".ui.PopupActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.Material.Dialog" />
+
         <!-- Notification buttons yahan aate hain — invisible, turant finish -->
         <activity
             android:name=".ui.TrampolineActivity"
@@ -90,6 +106,16 @@
 
         <receiver
             android:name=".receiver.DailyAlarmReceiver"
+            android:exported="false" />
+
+        <!-- Phase 3: screenshot auto-delete ka scheduled receiver -->
+        <receiver
+            android:name=".receiver.DeleteReceiver"
+            android:exported="false" />
+
+        <!-- Phase 3: battery-full jaise one-shot alarm notifications -->
+        <receiver
+            android:name=".receiver.AlarmNotifyReceiver"
             android:exported="false" />
 
         <receiver

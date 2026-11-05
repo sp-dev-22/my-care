@@ -12,8 +12,10 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import android.content.Intent
 import com.spdev22.mycare.data.CareSettings
 import com.spdev22.mycare.notify.DailyScheduler
+import com.spdev22.mycare.ui.AppPickerActivity
 
 /**
  * Settings (D3) — saari values user ke haath me, defaults plan ke.
@@ -24,6 +26,12 @@ class SettingsActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        buildUi()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // App Picker se lautne par nayi values dikhni chahiye
         buildUi()
     }
 
@@ -70,6 +78,29 @@ class SettingsActivity : Activity() {
             root, "Har app itne seconds se kam chale",
             CareSettings.KEY_BOREDOM_SECONDS, CareSettings.DEFAULT_BOREDOM_SECONDS, "sec"
         )
+
+        sectionLabel(root, "Phone Care (Phase 3)")
+        intRow(
+            root, "Paani Reminder — har itne ghante me",
+            CareSettings.KEY_PAANI_HOURS, CareSettings.DEFAULT_PAANI_HOURS, "ghante"
+        )
+        intRow(
+            root, "Battery Low warning — is % par ya neeche",
+            CareSettings.KEY_BATTERY_LOW, CareSettings.DEFAULT_BATTERY_LOW, "%"
+        )
+        intRow(
+            root, "Cache Safai — kisi app ka cache isse bada ho to",
+            CareSettings.KEY_CACHE_MB, CareSettings.DEFAULT_CACHE_MB, "MB"
+        )
+
+        sectionLabel(root, "Action Target Apps")
+        root.addView(TextView(this).apply {
+            text = "Notification ke buttons kaun sa app kholenge, yahan se chunein."
+            setPadding(0, 0, 0, 4)
+        })
+        slotRow(root, "Music button", "music")
+        slotRow(root, "Videos / YouTube button", "video")
+        slotRow(root, "Muse AI / WhatsApp button", "chat")
 
         sectionLabel(root, "Welcome")
         val welcomeBox = CheckBox(this).apply {
@@ -166,6 +197,37 @@ class SettingsActivity : Activity() {
                     }
                     .setNegativeButton("Cancel", null)
                     .show()
+            }
+        }
+        root.addView(row)
+    }
+
+    private fun slotRow(root: LinearLayout, label: String, slot: String) {
+        val chosen = CareSettings.targetApp(this, slot)
+        val currentLabel = if (chosen == null) {
+            "Auto"
+        } else {
+            try {
+                val pm = packageManager
+                pm.getApplicationLabel(pm.getApplicationInfo(chosen, 0)).toString()
+            } catch (e: Exception) {
+                chosen
+            }
+        }
+        val row = TextView(this).apply {
+            text = "$label — $currentLabel  (badalne ke liye tap karein)"
+            textSize = 16f
+            setPadding(0, 10, 0, 10)
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+            setOnClickListener {
+                startActivity(
+                    Intent(this@SettingsActivity, AppPickerActivity::class.java)
+                        .putExtra(AppPickerActivity.EXTRA_MODE, "slot")
+                        .putExtra(AppPickerActivity.EXTRA_SLOT, slot)
+                )
             }
         }
         root.addView(row)

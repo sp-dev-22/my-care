@@ -75,6 +75,24 @@ object GroupStore {
         saveGroups(context, groups)
     }
 
+    /** Ek app ko group me jodo. @return false agar pehle se tha / group nahi mila. */
+    fun addPackageToGroup(context: Context, groupName: String, pkg: String): Boolean {
+        val groups = loadGroups(context)
+        val g = groups.firstOrNull { it.name.equals(groupName, ignoreCase = true) }
+            ?: return false
+        if (g.packages.contains(pkg)) return false
+        g.packages.add(pkg)
+        saveGroups(context, groups)
+        return true
+    }
+
+    fun removePackageFromGroup(context: Context, groupName: String, pkg: String) {
+        val groups = loadGroups(context)
+        val g = groups.firstOrNull { it.name.equals(groupName, ignoreCase = true) }
+            ?: return
+        if (g.packages.remove(pkg)) saveGroups(context, groups)
+    }
+
     private fun prefs(context: Context) =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 }
