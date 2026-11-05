@@ -1,0 +1,12 @@
+.gradle/
+build/
+app/build/
+local.properties
+*.apk
+*.aab
+.idea/
+*.iml
+# Wrapper jar repo me base64 (.b64) ke roop me rehta hai; CI use decode karta hai
+gradle/wrapper/gradle-wrapper.jar
+# Decode hue launcher PNG (icon-b64/ se bante hain, source nahi hain)
+app/src/main/res/mipmap-*/ic_launcher*.png

@@ -1,0 +1,59 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+}
+
+android {
+    namespace 'com.spdev22.mycare'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'com.spdev22.mycare'
+        minSdk 24
+        targetSdk 34
+        versionCode 1
+        versionName '0.1.0-phase1'
+
+        // Target device: Infinix Smart 7 HD (Android 12 Go, 32-bit)
+        ndk {
+            abiFilters 'armeabi-v7a'
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+}
+
+// Launcher icons repo me base64 text files (icon-b64/) ke roop me rehte hain,
+// kyunki repo text-only channel se maintain hota hai. Build se pehle yeh task
+// unhe asli PNG mipmaps me decode kar deta hai. (SP WEB OS wali proven trick.)
+// File names: ic_launcher-<density>.b64, ic_launcher_round-<density>.b64
+def decodeLauncherIcons = tasks.register('decodeLauncherIcons') {
+    def b64Dir = file('icon-b64')
+    def resDir = file('src/main/res')
+    inputs.dir(b64Dir)
+    doLast {
+        b64Dir.listFiles()?.findAll { it.name.endsWith('.b64') }?.each { f ->
+            def base = f.name - '.b64'
+            def dash = base.lastIndexOf('-')
+            def iconName = base.substring(0, dash)
+            def density = base.substring(dash + 1)
+            def outDir = new File(resDir, "mipmap-${density}")
+            outDir.mkdirs()
+            new File(outDir, "${iconName}.png").bytes =
+                    java.util.Base64.mimeDecoder.decode(f.getText('UTF-8').trim())
+        }
+    }
+}
+tasks.named('preBuild') { dependsOn(decodeLauncherIcons) }
