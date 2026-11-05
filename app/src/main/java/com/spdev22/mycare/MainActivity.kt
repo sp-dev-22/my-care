@@ -84,7 +84,7 @@ class MainActivity : Activity() {
         }
         root.addView(wizardBtn)
 
-        val packBtn = Button(this).apply { text = "Workflow Pack dekho" }
+        val packBtn = Button(this).apply { text = "Workflows — On/Off" }
         packBtn.setOnClickListener {
             startActivity(Intent(this, WorkflowListActivity::class.java))
         }

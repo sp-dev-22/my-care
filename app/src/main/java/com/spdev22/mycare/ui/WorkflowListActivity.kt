@@ -2,18 +2,30 @@ package com.spdev22.mycare.ui
 
 import android.app.Activity
 import android.os.Bundle
+import android.view.Gravity
 import android.view.ViewGroup
-import android.widget.ArrayAdapter
 import android.widget.LinearLayout
-import android.widget.ListView
+import android.widget.ScrollView
+import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
+import com.spdev22.mycare.data.LogStore
+import com.spdev22.mycare.data.WorkflowPrefs
 import com.spdev22.mycare.engine.Workflow
 import com.spdev22.mycare.engine.WorkflowEngine
+import com.spdev22.mycare.notify.DailyScheduler
 
 /**
- * Ready-made workflow pack ki jhalak (D9) — Phase 1 me sirf dekhna hai.
- * On/off aur settings badalna agle phase me aayega.
+ * Workflows screen (0.2.2) — ready-made pack ke har workflow ka
+ * apna On/Off switch (D9: user sirf on/off aur settings badlega).
+ *
+ * OFF ka matlab pakka OFF hai:
+ *  - trigger engine use kabhi fire nahi karega, aur
+ *  - roz wale 'time' workflows ka laga hua alarm bhi cancel ho jayega.
+ * ON karte hi time wale workflows ke alarms dobara set ho jaate hain.
+ *
+ * Default sthiti pack ki apni `enabled` value hai; user ke toggle
+ * karte hi override WorkflowPrefs me save ho jata hai.
  */
 class WorkflowListActivity : Activity() {
 
@@ -24,40 +36,89 @@ class WorkflowListActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setPadding(40, 40, 40, 40)
         }
+        val scroll = ScrollView(this)
+        scroll.addView(root)
+        setContentView(scroll)
 
         root.addView(TextView(this).apply {
-            text = "Workflow Pack (ready-made)"
+            text = "Workflows — On/Off"
             textSize = 20f
         })
         root.addView(TextView(this).apply {
-            text = "Phase 2: core workflows (1–7) live hain — baaki Phase 3 me fire honge. Kisi workflow par tap karke uska sandesh dekho."
+            text = "Har workflow ko yahan se chalu/band karein, Boss. " +
+                "Jo OFF hai woh kabhi fire nahi hoga — roz wale time " +
+                "workflows ka alarm bhi band ho jayega."
             setPadding(0, 8, 0, 16)
         })
 
         val workflows = WorkflowEngine.loadPack(this)
-        val listView = ListView(this).apply {
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f
-            )
+        if (workflows.isEmpty()) {
+            root.addView(TextView(this).apply {
+                text = "Pack load nahi hua — koi workflow nahi mila."
+                textSize = 16f
+            })
+            return
         }
-        val labels = workflows.map { describe(it) }
-        listView.adapter = ArrayAdapter(
-            this, android.R.layout.simple_list_item_1, labels
-        )
-        listView.setOnItemClickListener { _, _, position, _ ->
-            val w = workflows[position]
-            val msg = w.text.ifEmpty { w.title }
-            Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+        for (wf in workflows) {
+            root.addView(workflowRow(wf))
         }
-        root.addView(listView)
 
-        setContentView(root)
+        root.addView(TextView(this).apply {
+            text = "\nNote: Switch ki sthiti aapki apni hai — pack update " +
+                "hone par bhi aapke On/Off waise hi rahenge."
+            setPadding(0, 20, 0, 0)
+        })
     }
 
-    private fun describe(w: Workflow): String {
-        val state = if (w.enabled) "ON" else "OFF"
-        val steps = if (w.steps.isEmpty()) "" else " • ${w.steps.size} extra steps"
-        return "${w.name} — $state\n" +
-            "trigger: ${w.triggerType} • bot: ${w.effectiveBotType}$steps"
+    private fun workflowRow(wf: Workflow): LinearLayout {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+            setPadding(0, 10, 0, 10)
+        }
+
+        val texts = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        texts.addView(TextView(this).apply {
+            text = wf.name
+            textSize = 16f
+        })
+        val steps = if (wf.steps.isEmpty()) "" else " • ${wf.steps.size} extra steps"
+        texts.addView(TextView(this).apply {
+            text = "trigger: ${wf.triggerType} • bot: ${wf.effectiveBotType}$steps"
+            textSize = 13f
+        })
+        row.addView(texts)
+
+        val toggle = Switch(this).apply {
+            // Listener lagane se PEHLE sthiti set karo, taaki khulte hi
+            // purani value par bekaar ka event na fire ho jaye
+            setOnCheckedChangeListener(null)
+            isChecked = WorkflowPrefs.isEnabled(this@WorkflowListActivity, wf)
+            setOnCheckedChangeListener { _, checked ->
+                WorkflowPrefs.setEnabled(this@WorkflowListActivity, wf.id, checked)
+                if (wf.triggerType == "time") {
+                    // Time wale workflow ka alarm schedule/cancel turant taaza karo
+                    DailyScheduler.scheduleAll(this@WorkflowListActivity)
+                }
+                LogStore.log(
+                    this@WorkflowListActivity,
+                    "Workflow [${wf.id}] user ne ${if (checked) "ON" else "OFF"} kiya"
+                )
+                Toast.makeText(
+                    this@WorkflowListActivity,
+                    "${wf.name} — ${if (checked) "ON" else "OFF"}",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
+        row.addView(toggle)
+        return row
     }
 }

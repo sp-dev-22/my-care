@@ -2,10 +2,12 @@ package com.spdev22.mycare.ui
 
 import android.app.Activity
 import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.os.Bundle
 import android.view.ViewGroup
 import android.widget.AbsListView
 import android.widget.ArrayAdapter
+import android.widget.CheckBox
 import android.widget.LinearLayout
 import android.widget.ListView
 import android.widget.TextView
@@ -33,13 +35,17 @@ class AppPickerActivity : Activity() {
     private var groupName: String = ""
     private var entries: List<AppEntry> = emptyList()
 
+    // 0.2.2: system apps chhupana default hai; toggle ON ho to woh bhi dikhte hain
+    private var showSystem = false
+    private var pickerList: ListView? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         mode = intent.getStringExtra(EXTRA_MODE) ?: "slot"
         slot = intent.getStringExtra(EXTRA_SLOT) ?: ""
         groupName = intent.getStringExtra(EXTRA_GROUP) ?: ""
 
-        entries = loadLaunchableApps()
+        entries = loadAllApps()
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -61,15 +67,29 @@ class AppPickerActivity : Activity() {
             }
             setPadding(0, 6, 0, 12)
         })
+        root.addView(CheckBox(this).apply {
+            text = "System apps bhi dikhao"
+            setOnCheckedChangeListener { _, checked ->
+                showSystem = checked
+                entries = loadAllApps()
+                refreshList()
+            }
+        })
 
         val listView = ListView(this).apply {
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f
             )
         }
+        pickerList = listView
         root.addView(listView)
         setContentView(root)
 
+        refreshList()
+    }
+
+    private fun refreshList() {
+        val listView = pickerList ?: return
         if (mode == "group") {
             buildGroupList(listView)
         } else {
@@ -120,22 +140,41 @@ class AppPickerActivity : Activity() {
         }
     }
 
-    private fun loadLaunchableApps(): List<AppEntry> {
+    /**
+     * 0.2.2 BUG FIX — pehle sirf launcher-intent wale apps dikhte the
+     * (queryIntentActivities), isliye Groups me bahut saare apps gayab the.
+     * Android 11+ package-visibility ke kaaran woh raasta aadhi list deta hai.
+     *
+     * Ab: manifest me QUERY_ALL_PACKAGES ke saath getInstalledApplications
+     * se POORI list aati hai. User apps hamesha dikhte hain; asal system
+     * apps (jo update bhi na hue hon) sirf "System apps bhi dikhao" ON ho
+     * aur woh khul sakte hon (launch intent ho) tab dikhte hain.
+     */
+    private fun loadAllApps(): List<AppEntry> {
         val pm = packageManager
-        val main = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
-        val resolved = try {
-            pm.queryIntentActivities(main, 0)
+        val infos = try {
+            @Suppress("DEPRECATION")
+            pm.getInstalledApplications(0)
         } catch (e: Exception) {
             emptyList()
         }
-        val seen = HashSet<String>()
         val out = mutableListOf<AppEntry>()
-        for (ri in resolved) {
-            val pkg = ri.activityInfo?.packageName ?: continue
-            if (pkg == packageName) continue
-            if (!seen.add(pkg)) continue
+        for (info in infos) {
+            val pkg = info.packageName
+            if (pkg.isNullOrEmpty() || pkg == packageName) continue
+            val isSystem = info.flags and ApplicationInfo.FLAG_SYSTEM != 0 &&
+                info.flags and ApplicationInfo.FLAG_UPDATED_SYSTEM_APP == 0
+            if (isSystem) {
+                if (!showSystem) continue
+                val launchable = try {
+                    pm.getLaunchIntentForPackage(pkg) != null
+                } catch (e: Exception) {
+                    false
+                }
+                if (!launchable) continue
+            }
             val label = try {
-                ri.loadLabel(pm)?.toString() ?: pkg
+                pm.getApplicationLabel(info).toString()
             } catch (e: Exception) {
                 pkg
             }

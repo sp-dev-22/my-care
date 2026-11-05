@@ -24,6 +24,7 @@ import android.provider.MediaStore
 import android.util.Log
 import com.spdev22.mycare.data.CareSettings
 import com.spdev22.mycare.data.LogStore
+import com.spdev22.mycare.data.WorkflowPrefs
 import com.spdev22.mycare.engine.CareChecks
 import com.spdev22.mycare.engine.HisaabBuilder
 import com.spdev22.mycare.engine.UsageTracker
@@ -137,7 +138,8 @@ class CareService : Service() {
         val usageOk = t.poll() // Usage Access nahi to usage triggers band, baaki chalte rahenge
         val batt = batteryInfo()
         for (wf in pack) {
-            if (!wf.enabled) continue
+            // 0.2.2: user ka on/off toggle hi final — OFF workflow kabhi fire nahi
+            if (!WorkflowPrefs.isEnabled(this, wf)) continue
             when (wf.triggerType) {
                 "app_hopping" -> if (usageOk) evalBoredom(wf, t, now)
                 "single_app_over" -> if (usageOk) evalLongApp(wf, t, now)
@@ -474,7 +476,8 @@ class CareService : Service() {
         val now = System.currentTimeMillis()
         if (now - lastShotCheckMs < 4_000L) return
         lastShotCheckMs = now
-        val wf = pack.firstOrNull { it.triggerType == "screenshot_taken" && it.enabled }
+        val wf = pack.firstOrNull { it.triggerType == "screenshot_taken" }
+            ?.takeIf { WorkflowPrefs.isEnabled(this, it) }
             ?: return
         val latest = latestScreenshot() ?: return
         val (id, uri) = latest
@@ -503,7 +506,8 @@ class CareService : Service() {
         val now = System.currentTimeMillis()
         if (now - lastContactCheckMs < 4_000L) return
         lastContactCheckMs = now
-        val wf = pack.firstOrNull { it.triggerType == "contact_saved" && it.enabled }
+        val wf = pack.firstOrNull { it.triggerType == "contact_saved" }
+            ?.takeIf { WorkflowPrefs.isEnabled(this, it) }
             ?: return
         try {
             contentResolver.query(
@@ -584,7 +588,8 @@ class CareService : Service() {
         if (!CareSettings.welcomeEnabled(this)) return
         val today = UsageTracker.dayKey(System.currentTimeMillis())
         if (CareSettings.lastWelcomeDate(this) == today) return
-        val wf = pack.firstOrNull { it.triggerType == "first_unlock" && it.enabled }
+        val wf = pack.firstOrNull { it.triggerType == "first_unlock" }
+            ?.takeIf { WorkflowPrefs.isEnabled(this, it) }
             ?: return
         NotifyFactory.postWorkflow(this, wf)
         CareSettings.setLastWelcomeDate(this, today)

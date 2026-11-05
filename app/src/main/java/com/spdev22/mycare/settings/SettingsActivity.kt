@@ -6,6 +6,7 @@ import android.app.TimePickerDialog
 import android.os.Bundle
 import android.text.InputType
 import android.view.ViewGroup
+import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -14,6 +15,8 @@ import android.widget.TextView
 import android.widget.Toast
 import android.content.Intent
 import com.spdev22.mycare.data.CareSettings
+import com.spdev22.mycare.data.GroupStore
+import com.spdev22.mycare.engine.HisaabBuilder
 import com.spdev22.mycare.notify.DailyScheduler
 import com.spdev22.mycare.ui.AppPickerActivity
 
@@ -101,6 +104,17 @@ class SettingsActivity : Activity() {
         slotRow(root, "Music button", "music")
         slotRow(root, "Videos / YouTube button", "video")
         slotRow(root, "Muse AI / WhatsApp button", "chat")
+
+        sectionLabel(root, "Workflows ke liye zaroori Groups")
+        root.addView(TextView(this).apply {
+            text = "Aaj Ka Hisaab jaise workflows App Groups ko NAAM se " +
+                "pehchante hain. Yeh do naam ke group bane hone chahiye — " +
+                "warna hisaab me padhai aur manoranjan alag nahi hoga. " +
+                "Group banakar Main screen se unme apps jod dijiye."
+            setPadding(0, 0, 0, 4)
+        })
+        requiredGroupRow(root, HisaabBuilder.STUDY_GROUP_NAME, "padhai / study wale apps ke liye")
+        requiredGroupRow(root, HisaabBuilder.ENTERTAINMENT_GROUP_NAME, "manoranjan / entertainment wale apps ke liye")
 
         sectionLabel(root, "Welcome")
         val welcomeBox = CheckBox(this).apply {
@@ -200,6 +214,41 @@ class SettingsActivity : Activity() {
             }
         }
         root.addView(row)
+    }
+
+    /**
+     * Ek zaroori group ki live sthiti: bana hai to ✓, na bana ho to
+     * ✗ ke saath ek-tap "Banao" button (khaali group GroupStore se
+     * ban jata hai; apps baad me Main screen se judenge).
+     * Naam ki jaanch case-insensitive hai — "padhai" bhi chalega.
+     */
+    private fun requiredGroupRow(root: LinearLayout, name: String, hint: String) {
+        val exists = GroupStore.loadGroups(this)
+            .any { it.name.equals(name, ignoreCase = true) }
+        if (exists) {
+            root.addView(TextView(this).apply {
+                text = "$name — bana hai ✓  ($hint)"
+                textSize = 16f
+                setPadding(0, 10, 0, 10)
+            })
+        } else {
+            root.addView(TextView(this).apply {
+                text = "$name — nahi bana ✗  ($hint)"
+                textSize = 16f
+                setPadding(0, 10, 0, 2)
+            })
+            root.addView(Button(this).apply {
+                text = "'$name' group banao"
+                setOnClickListener {
+                    if (GroupStore.addGroup(this@SettingsActivity, name)) {
+                        toast("'$name' group ban gaya — Main screen se isme apps jod dijiye")
+                    } else {
+                        toast("Group pehle se hai, Boss")
+                    }
+                    buildUi()
+                }
+            })
+        }
     }
 
     private fun slotRow(root: LinearLayout, label: String, slot: String) {

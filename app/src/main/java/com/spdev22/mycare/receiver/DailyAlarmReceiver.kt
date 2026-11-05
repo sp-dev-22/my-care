@@ -3,6 +3,7 @@ package com.spdev22.mycare.receiver
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import com.spdev22.mycare.data.WorkflowPrefs
 import com.spdev22.mycare.engine.HisaabBuilder
 import com.spdev22.mycare.engine.WorkflowEngine
 import com.spdev22.mycare.notify.DailyScheduler
@@ -20,7 +21,8 @@ class DailyAlarmReceiver : BroadcastReceiver() {
         val pack = WorkflowEngine.loadPack(context)
         val wf = pack.firstOrNull { it.id == wfId } ?: return
 
-        if (wf.enabled) {
+        // 0.2.2: pack ki value nahi, user ka toggle final hai
+        if (WorkflowPrefs.isEnabled(context, wf)) {
             if (wf.id == "aaj_ka_hisaab") {
                 val summary = HisaabBuilder.buildText(context)
                 NotifyFactory.postWorkflow(context, wf, mapOf("hisaab" to summary))

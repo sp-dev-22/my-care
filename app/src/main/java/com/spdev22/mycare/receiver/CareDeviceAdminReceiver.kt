@@ -6,6 +6,7 @@ import android.content.Intent
 import android.util.Log
 import com.spdev22.mycare.data.CareSettings
 import com.spdev22.mycare.data.LogStore
+import com.spdev22.mycare.data.WorkflowPrefs
 import com.spdev22.mycare.engine.WorkflowEngine
 import com.spdev22.mycare.notify.NotifyFactory
 
@@ -45,7 +46,8 @@ class CareDeviceAdminReceiver : DeviceAdminReceiver() {
         // Alert bhejkar ginati reset — har koshish par spam nahi
         CareSettings.setStateLong(context, KEY_FAIL_COUNT, 0L)
         val wf = WorkflowEngine.loadPack(context)
-            .firstOrNull { it.triggerType == "failed_unlock" && it.enabled }
+            .firstOrNull { it.triggerType == "failed_unlock" }
+            ?.takeIf { WorkflowPrefs.isEnabled(context, it) }
             ?: return
         NotifyFactory.postWorkflow(context, wf)
     }

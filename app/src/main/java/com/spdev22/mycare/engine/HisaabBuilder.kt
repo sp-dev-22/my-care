@@ -18,6 +18,16 @@ import java.util.Calendar
  */
 object HisaabBuilder {
 
+    /**
+     * Canonical group naam — Settings ke "zaroori Groups" section aur
+     * hisaab ki pehchan inhi par tikti hai. Classifier neeche naam ke
+     * andar in shabdon (aur unke bhai-bandhuon) ko dhoondhta hai,
+     * lekin user ko yahi do naam banane ko kaha jata hai taaki
+     * pehchan hamesha pakki rahe.
+     */
+    const val STUDY_GROUP_NAME = "Padhai"
+    const val ENTERTAINMENT_GROUP_NAME = "Manoranjan"
+
     fun buildText(context: Context): String {
         if (!UsageTracker.hasUsageAccess(context)) {
             return "Boss, Usage Access nahi mila — hisaab nahi ban paya. " +

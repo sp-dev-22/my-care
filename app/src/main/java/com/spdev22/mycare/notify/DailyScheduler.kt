@@ -7,6 +7,7 @@ import android.content.Intent
 import android.os.Build
 import android.util.Log
 import com.spdev22.mycare.data.CareSettings
+import com.spdev22.mycare.data.WorkflowPrefs
 import com.spdev22.mycare.engine.Workflow
 import com.spdev22.mycare.engine.WorkflowEngine
 import com.spdev22.mycare.receiver.DailyAlarmReceiver
@@ -36,6 +37,13 @@ object DailyScheduler {
 
     fun scheduleOne(context: Context, wf: Workflow) {
         if (wf.triggerType != "time") return
+        // 0.2.2: user ne workflow OFF kiya ho to alarm set karne ke
+        // bajaaye purana laga hua alarm CANCEL kar do — band workflow
+        // ka time-alarm kabhi nahi bajna chahiye.
+        if (!WorkflowPrefs.isEnabled(context, wf)) {
+            cancelOne(context, wf)
+            return
+        }
         val triggerAt = nextOccurrence(resolveTime(context, wf))
         val am = context.getSystemService(AlarmManager::class.java) ?: return
         val pi = pendingIntent(context, wf)
@@ -55,6 +63,19 @@ object DailyScheduler {
                 Log.w(TAG, "Fallback alarm bhi fail: ${e2.message}")
             }
         }
+    }
+
+    /** Ek workflow ka pending daily alarm hata do (toggle OFF par). */
+    fun cancelOne(context: Context, wf: Workflow) {
+        if (wf.triggerType != "time") return
+        val am = context.getSystemService(AlarmManager::class.java) ?: return
+        val pi = pendingIntent(context, wf)
+        try {
+            am.cancel(pi)
+        } catch (e: Exception) {
+            Log.w(TAG, "Alarm cancel fail (${wf.id}): ${e.message}")
+        }
+        pi.cancel()
     }
 
     /** Workflow ka effective "HH:MM" — user setting > pack trigger param > default. */
