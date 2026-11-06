@@ -12,6 +12,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import com.spdev22.mycare.data.LogStore
+import com.spdev22.mycare.data.UserWorkflowStore
 import com.spdev22.mycare.data.WorkflowOverrides
 import com.spdev22.mycare.engine.Workflow
 import com.spdev22.mycare.engine.WorkflowEngine
@@ -70,6 +71,12 @@ class WorkflowEditActivity : Activity() {
             root.addView(UiKit.small(this, "✏️ Is workflow par aapke custom edits lagu hain."))
             root.addView(UiKit.gap(this, 4))
         }
+        val isUserWorkflow = UserWorkflowStore.contains(this, packWf.id)
+        if (isUserWorkflow) {
+            root.addView(UiKit.small(this, "✨ Yeh aapka apna (AI se banaya) workflow hai — neeche se delete bhi ho sakta hai."))
+            root.addView(UiKit.gap(this, 4))
+        }
+
         // ---------- Message ----------
         section(root, "Message")
         root.addView(label("Title"))
