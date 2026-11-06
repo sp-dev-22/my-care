@@ -1,6 +1,7 @@
 package com.spdev22.mycare.ui
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.app.TimePickerDialog
 import android.os.Bundle
 import android.text.InputType
@@ -14,6 +15,7 @@ import android.widget.Toast
 import com.spdev22.mycare.data.LogStore
 import com.spdev22.mycare.data.UserWorkflowStore
 import com.spdev22.mycare.data.WorkflowOverrides
+import com.spdev22.mycare.data.WorkflowPrefs
 import com.spdev22.mycare.engine.Workflow
 import com.spdev22.mycare.engine.WorkflowEngine
 import com.spdev22.mycare.notify.DailyScheduler
@@ -167,6 +169,27 @@ class WorkflowEditActivity : Activity() {
         val resetBtn = UiKit.secondaryButton(this, "Pack default par reset")
         resetBtn.setOnClickListener { resetAll() }
         root.addView(resetBtn)
+
+        // ---------- Delete (sirf user ke apne workflows) ----------
+        if (isUserWorkflow) {
+            section(root, "Apna workflow hatayein")
+            val delBtn = UiKit.dangerButton(this, "🗑️ Yeh workflow delete karo")
+            delBtn.setOnClickListener { confirmDelete() }
+            root.addView(delBtn)
+        }
+    }
+
+    /** User ke apne workflow ko pakki taur par hatana — pucca karke. */
+    private fun confirmDelete() {
+        AlertDialog.Builder(this)
+            .setTitle("Workflow delete karein?")
+            .setMessage(
+                "'${packWf.name}' hamesha ke liye hat jayega, Boss. " +
+                    "Uske saare edits aur On/Off sthiti bhi saaf ho jayegi."
+            )
+            .setPositiveButton("Delete") { _, _ -> }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     /**
