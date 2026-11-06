@@ -19,15 +19,11 @@ import com.spdev22.mycare.data.GroupStore
 import com.spdev22.mycare.engine.HisaabBuilder
 import com.spdev22.mycare.notify.DailyScheduler
 import com.spdev22.mycare.ui.AppPickerActivity
-import com.spdev22.mycare.ui.UiKit
 
 /**
  * Settings (D3) — saari values user ke haath me, defaults plan ke.
  * Time badalne par roz wale alarms turant dobara set ho jaate hain;
  * baaki thresholds engine agle poll (20 sec) me utha leta hai.
- *
- * 0.2.5: UiKit wala naya look (cards + palette) aur naya
- * "Gemini AI" section — API key (sirf phone par) + model naam.
  */
 class SettingsActivity : Activity() {
 
@@ -43,17 +39,23 @@ class SettingsActivity : Activity() {
     }
 
     private fun buildUi() {
-        val root = UiKit.root(this)
-        setContentView(UiKit.scroll(this, root))
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(40, 40, 40, 40)
+        }
+        val scroll = ScrollView(this)
+        scroll.addView(root)
+        setContentView(scroll)
 
-        root.addView(UiKit.title(this, "Settings"))
-        root.addView(
-            UiKit.subtitle(
-                this,
-                "Boss, saare time aur limits yahan se badle ja sakte hain. " +
-                    "Badlav turant lagu ho jata hai."
-            )
-        )
+        root.addView(TextView(this).apply {
+            text = "Settings"
+            textSize = 20f
+        })
+        root.addView(TextView(this).apply {
+            text = "Boss, saare time aur limits yahan se badle ja sakte hain. " +
+                "Badlav turant lagu ho jata hai."
+            setPadding(0, 8, 0, 12)
+        })
 
         sectionLabel(root, "Roz ke Suggestions")
         timeRow(root, "Study Suggestion", "study_time", CareSettings.DEFAULT_STUDY_TIME)
@@ -97,8 +99,8 @@ class SettingsActivity : Activity() {
         sectionLabel(root, "Action Target Apps")
         root.addView(TextView(this).apply {
             text = "Notification ke buttons kaun sa app kholenge, yahan se chunein. " +
-                "Clock wala app Alarm Suggestion par KHULEGA (0.2.5) — " +
-                "alarm aap wahi se khud set karte hain."
+                "Clock app alarm lagane (Alarm Suggestion) ke kaam aayega — " +
+                "agar alarm sahi se nahi lagta to apna Clock app yahan chun lein."
             setPadding(0, 0, 0, 4)
         })
         slotRow(root, "Music button", "music")
@@ -117,133 +119,31 @@ class SettingsActivity : Activity() {
         requiredGroupRow(root, HisaabBuilder.STUDY_GROUP_NAME, "padhai / study wale apps ke liye")
         requiredGroupRow(root, HisaabBuilder.ENTERTAINMENT_GROUP_NAME, "manoranjan / entertainment wale apps ke liye")
 
-        sectionLabel(root, "Gemini AI — Workflow Banwao")
-        root.addView(TextView(this).apply {
-            text = "'AI se Workflow banwao' ke liye aapki apni Gemini API " +
-                "key chahiye. Key SIRF is phone me rehti hai — kahin " +
-                "upload nahi hoti. Internet sirf tab chalta hai jab " +
-                "aap 'Banwao' dabate hain."
-            setPadding(0, 0, 0, 4)
-        })
-        geminiKeyRow(root)
-        geminiModelRow(root)
-
         sectionLabel(root, "Welcome")
-        val welcomeCard = UiKit.card(this)
         val welcomeBox = CheckBox(this).apply {
             text = "Welcome Boss — din ke pehle unlock par"
             isChecked = CareSettings.welcomeEnabled(this@SettingsActivity)
             textSize = 16f
-            setTextColor(UiKit.INK)
-            UiKit.tintCheckBox(this@SettingsActivity, this)
             setOnCheckedChangeListener { _, checked ->
                 CareSettings.setWelcomeEnabled(this@SettingsActivity, checked)
                 toast(if (checked) "Welcome Boss ON" else "Welcome Boss OFF")
             }
         }
-        welcomeCard.addView(welcomeBox)
-        root.addView(welcomeCard)
+        root.addView(welcomeBox)
 
-        root.addView(UiKit.small(this, "Note: Koi value badalna = sirf aapke liye. Pack ke " +
-            "baaki workflows apne defaults par chalte rahenge."))
-    }
-
-    /** Gemini API key wali kataar — sthiti dikhao, tap = badlo/hatayo. */
-    private fun geminiKeyRow(root: LinearLayout) {
-        val key = CareSettings.geminiKey(this)
-        val status = if (key == null) {
-            "nahi set ✗ — tap karke daalein"
-        } else {
-            "set hai ✓ (…${key.takeLast(4)}) — tap karke badlein"
-        }
-        val row = TextView(this).apply {
-            text = "Gemini API Key — $status"
-            textSize = 16f
-            setTextColor(UiKit.INK)
-            setPadding(0, 10, 0, 10)
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            )
-            setOnClickListener { showGeminiKeyDialog() }
-        }
-        val card = UiKit.card(this)
-        card.addView(row)
-        root.addView(card)
-    }
-
-    private fun showGeminiKeyDialog() {
-        val input = EditText(this).apply {
-            hint = "AIza… wali Gemini API key yahan chipkayein"
-            // Password-shailee ka input — kandhe ke peeche se koi na padhe
-            inputType = InputType.TYPE_CLASS_TEXT or
-                InputType.TYPE_TEXT_VARIATION_PASSWORD
-            setSingleLine(true)
-        }
-        AlertDialog.Builder(this)
-            .setTitle("Gemini API Key")
-            .setView(input)
-            .setPositiveButton("Save") { _, _ ->
-                val value = input.text.toString().trim()
-                if (value.isEmpty()) {
-                    toast("Key khaali hai, Boss — hatani ho to 'Key hatayein' dabayein")
-                } else {
-                    CareSettings.setGeminiKey(this, value)
-                    toast("Gemini key save ho gayi ✓")
-                    buildUi()
-                }
-            }
-            .setNeutralButton("Key hatayein") { _, _ ->
-                CareSettings.setGeminiKey(this, null)
-                toast("Gemini key hata di gayi")
-                buildUi()
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
-    }
-
-    /** Gemini model wali kataar — naam dikhao, tap = badlo. */
-    private fun geminiModelRow(root: LinearLayout) {
-        val current = CareSettings.geminiModel(this)
-        val row = TextView(this).apply {
-            text = "Gemini Model — $current  (badalne ke liye tap karein)"
-            textSize = 16f
-            setTextColor(UiKit.INK)
-            setPadding(0, 10, 0, 10)
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            )
-            setOnClickListener {
-                val input = EditText(this@SettingsActivity).apply {
-                    setText(current)
-                    hint = "jaise gemini-2.0-flash"
-                    setSingleLine(true)
-                }
-                AlertDialog.Builder(this@SettingsActivity)
-                    .setTitle("Gemini Model")
-                    .setView(input)
-                    .setPositiveButton("Save") { _, _ ->
-                        val value = input.text.toString().trim()
-                        if (value.isNotEmpty()) {
-                            CareSettings.setGeminiModel(this@SettingsActivity, value)
-                            toast("Model set ho gaya: $value")
-                            buildUi()
-                        } else {
-                            toast("Model ka naam khaali nahi ho sakta, Boss")
-                        }
-                    }
-                    .setNegativeButton("Cancel", null)
-                    .show()
-            }
-        }
-        val card = UiKit.card(this)
-        card.addView(row)
-        root.addView(card)
+        root.addView(TextView(this).apply {
+            text = "\nNote: Koi value badalna = sirf aapke liye. Pack ke " +
+                "baaki workflows apne defaults par chalte rahenge."
+            setPadding(0, 20, 0, 0)
+        })
     }
 
     private fun sectionLabel(root: LinearLayout, text: String) {
-        root.addView(UiKit.section(this, text))
+        root.addView(TextView(this).apply {
+            this.text = text
+            textSize = 17f
+            setPadding(0, 22, 0, 6)
+        })
     }
 
     private fun timeRow(
@@ -256,7 +156,6 @@ class SettingsActivity : Activity() {
         val row = TextView(this).apply {
             text = "$label — $current  (badalne ke liye tap karein)"
             textSize = 16f
-            setTextColor(UiKit.INK)
             setPadding(0, 10, 0, 10)
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -275,9 +174,7 @@ class SettingsActivity : Activity() {
                 }, h, m, true).show()
             }
         }
-        val card = UiKit.card(this)
-        card.addView(row)
-        root.addView(card)
+        root.addView(row)
     }
 
     private fun intRow(
@@ -291,7 +188,6 @@ class SettingsActivity : Activity() {
         val row = TextView(this).apply {
             text = "$label — $current $unit  (badalne ke liye tap karein)"
             textSize = 16f
-            setTextColor(UiKit.INK)
             setPadding(0, 10, 0, 10)
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -320,9 +216,7 @@ class SettingsActivity : Activity() {
                     .show()
             }
         }
-        val card = UiKit.card(this)
-        card.addView(row)
-        root.addView(card)
+        root.addView(row)
     }
 
     /**
@@ -334,22 +228,20 @@ class SettingsActivity : Activity() {
     private fun requiredGroupRow(root: LinearLayout, name: String, hint: String) {
         val exists = GroupStore.loadGroups(this)
             .any { it.name.equals(name, ignoreCase = true) }
-        val card = UiKit.card(this)
         if (exists) {
-            card.addView(TextView(this).apply {
+            root.addView(TextView(this).apply {
                 text = "$name — bana hai ✓  ($hint)"
                 textSize = 16f
-                setTextColor(UiKit.INK)
                 setPadding(0, 10, 0, 10)
             })
         } else {
-            card.addView(TextView(this).apply {
+            root.addView(TextView(this).apply {
                 text = "$name — nahi bana ✗  ($hint)"
                 textSize = 16f
-                setTextColor(UiKit.INK)
                 setPadding(0, 10, 0, 2)
             })
-            card.addView(UiKit.primaryButton(this, "'$name' group banao").apply {
+            root.addView(Button(this).apply {
+                text = "'$name' group banao"
                 setOnClickListener {
                     if (GroupStore.addGroup(this@SettingsActivity, name)) {
                         toast("'$name' group ban gaya — Main screen se isme apps jod dijiye")
@@ -360,7 +252,6 @@ class SettingsActivity : Activity() {
                 }
             })
         }
-        root.addView(card)
     }
 
     private fun slotRow(root: LinearLayout, label: String, slot: String) {
@@ -378,7 +269,6 @@ class SettingsActivity : Activity() {
         val row = TextView(this).apply {
             text = "$label — $currentLabel  (badalne ke liye tap karein)"
             textSize = 16f
-            setTextColor(UiKit.INK)
             setPadding(0, 10, 0, 10)
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -392,9 +282,7 @@ class SettingsActivity : Activity() {
                 )
             }
         }
-        val card = UiKit.card(this)
-        card.addView(row)
-        root.addView(card)
+        root.addView(row)
     }
 
     private fun toast(msg: String) =

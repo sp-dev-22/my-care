@@ -2,7 +2,6 @@ package com.spdev22.mycare.engine
 
 import android.content.Context
 import android.util.Log
-import com.spdev22.mycare.data.UserWorkflowStore
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -19,15 +18,8 @@ object WorkflowEngine {
     private const val TAG = "WorkflowEngine"
     const val PACK_ASSET_PATH = "workflows/pack_v1.json"
 
-    /**
-     * Poori workflow list jo asal me chalegi: pehle ready-made pack,
-     * phir user ke apne banaye hue workflows (0.2.5: Gemini AI se
-     * bane). HAR consumer yahi function use karta hai — engine,
-     * scheduler, receivers, toggles, Editor-lite — isliye user
-     * workflows har jagah apne aap shamil ho jaate hain.
-     */
     fun loadPack(context: Context): List<Workflow> {
-        val pack = try {
+        return try {
             val json = context.assets.open(PACK_ASSET_PATH)
                 .bufferedReader().use { it.readText() }
             parsePack(json)
@@ -35,16 +27,6 @@ object WorkflowEngine {
             Log.e(TAG, "Pack load nahi hua: ${e.message}")
             emptyList()
         }
-        val user = try {
-            UserWorkflowStore.load(context)
-        } catch (e: Exception) {
-            Log.e(TAG, "User workflows load nahi hue: ${e.message}")
-            emptyList()
-        }
-        if (user.isEmpty()) return pack
-        // Id takraav ho to pack wala hi rahe — user wala chhod do
-        val packIds = pack.map { it.id }.toSet()
-        return pack + user.filter { it.id !in packIds }
     }
 
     fun parsePack(json: String): List<Workflow> {
@@ -53,13 +35,10 @@ object WorkflowEngine {
         val result = mutableListOf<Workflow>()
         for (i in 0 until arr.length()) {
             val obj = arr.optJSONObject(i) ?: continue
-            result.add(parseWorkflowObject(obj))
+            result.add(parseWorkflow(obj))
         }
         return result
     }
-
-    /** Ek akela workflow record parse karo (pack ya user workflow). */
-    fun parseWorkflowObject(obj: JSONObject): Workflow = parseWorkflow(obj)
 
     private fun parseWorkflow(obj: JSONObject): Workflow {
         val trigger = obj.optJSONObject("trigger")

@@ -47,53 +47,42 @@ class AppPickerActivity : Activity() {
 
         entries = loadAllApps()
 
-        val root = UiKit.root(this)
-        root.addView(
-            UiKit.title(
-                this, when (mode) {
-                    "group" -> "'$groupName' group ke apps chunein"
-                    else -> slotTitle(slot)
-                }
-            )
-        )
-        root.addView(
-            UiKit.subtitle(
-                this, when (mode) {
-                    "group" -> "Jo apps is group me hone chahiye, unpar tick rakhein. " +
-                        "Tap karte hi save ho jata hai."
-                    else -> "Is kaam ke liye kaun sa app khule, woh chunein. " +
-                        "'Auto' par pack ke defaults chalenge."
-                }
-            )
-        )
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(32, 32, 32, 32)
+        }
+        root.addView(TextView(this).apply {
+            text = when (mode) {
+                "group" -> "'$groupName' group ke apps chunein"
+                else -> slotTitle(slot)
+            }
+            textSize = 19f
+        })
+        root.addView(TextView(this).apply {
+            text = when (mode) {
+                "group" -> "Jo apps is group me hone chahiye, unpar tick rakhein. " +
+                    "Tap karte hi save ho jata hai."
+                else -> "Is kaam ke liye kaun sa app khule, woh chunein. " +
+                    "'Auto' par pack ke defaults chalenge."
+            }
+            setPadding(0, 6, 0, 12)
+        })
         root.addView(CheckBox(this).apply {
             text = "System apps bhi dikhao"
-            textSize = 15f
-            setTextColor(UiKit.INK)
-            UiKit.tintCheckBox(this@AppPickerActivity, this)
             setOnCheckedChangeListener { _, checked ->
                 showSystem = checked
                 entries = loadAllApps()
                 refreshList()
             }
         })
-        root.addView(UiKit.gap(this, 6))
 
         val listView = ListView(this).apply {
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            )
-            setBackgroundColor(android.graphics.Color.TRANSPARENT)
-        }
-        pickerList = listView
-        val listCard = UiKit.card(this).apply {
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f
             )
         }
-        listCard.addView(listView)
-        root.addView(listCard)
+        pickerList = listView
+        root.addView(listView)
         setContentView(root)
 
         refreshList()

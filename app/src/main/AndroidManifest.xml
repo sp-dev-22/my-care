@@ -21,10 +21,6 @@
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
-    <!-- 0.2.5: INTERNET sirf "AI se Workflow banwao" (Gemini) ke liye hai —
-         user ke "Banwao" dabane par hi, uski apni API key se, network
-         chalta hai. Baaki poora app hamesha ki tarah offline hai. -->
-    <uses-permission android:name="android.permission.INTERNET" />
 
     <application
         android:allowBackup="false"
@@ -48,11 +44,6 @@
             android:exported="false" />
         <activity
             android:name=".ui.WorkflowEditActivity"
-            android:exported="false" />
-
-        <!-- 0.2.5: Gemini se workflow banwane wali screen -->
-        <activity
-            android:name=".ui.AiWorkflowActivity"
             android:exported="false" />
 
         <activity

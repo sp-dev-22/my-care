@@ -6,6 +6,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.view.ViewGroup
 import android.widget.ArrayAdapter
+import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ListView
@@ -17,21 +18,15 @@ import com.spdev22.mycare.engine.WorkflowEngine
 import com.spdev22.mycare.service.CareService
 import com.spdev22.mycare.settings.SettingsActivity
 import com.spdev22.mycare.setup.SetupWizardActivity
-import com.spdev22.mycare.ui.AiWorkflowActivity
 import com.spdev22.mycare.ui.AppPickerActivity
 import com.spdev22.mycare.ui.LogsActivity
-import com.spdev22.mycare.ui.UiKit
 import com.spdev22.mycare.ui.WorkflowListActivity
 
 /**
  * Main screen:
  * App Groups ki list + naya group banana (D1),
- * Setup Wizard, Workflow Pack, Settings, Logs aur — 0.2.5 se —
- * "AI se Workflow banwao" (Gemini) ke raaste,
+ * Setup Wizard, Workflow Pack aur Settings ke raaste,
  * aur Care Service (live engine) chalu karna.
- *
- * 0.2.5: UiKit se naya minimal, beautiful look — shaant palette,
- * safed cards, teal buttons.
  */
 class MainActivity : Activity() {
 
@@ -42,76 +37,72 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val root = UiKit.root(this)
-        root.addView(UiKit.title(this, "Android & My Care"))
-        root.addView(
-            UiKit.subtitle(
-                this,
-                "Jo aapke phone ka aur aapka — dono ka khayal rakhe.\n" +
-                    "v0.2.5: saare 16 workflows zinda hain, aur ab Gemini AI se " +
-                    "apne workflows bhi ban sakte hain. Group par tap karke " +
-                    "uske apps chunein."
-            )
-        )
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(40, 40, 40, 40)
+        }
 
-        statusView = UiKit.small(this, "")
+        val title = TextView(this).apply {
+            text = "Android & My Care"
+            textSize = 22f
+        }
+        root.addView(title)
+
+        val subtitle = TextView(this).apply {
+            text = "Jo aapke phone ka aur aapka — dono ka khayal rakhe.\n" +
+                "v0.3: saare 16 workflows zinda hain — core care, battery, " +
+                "screenshot, contact, cache, ghuspaithiya aur popup ke saath. " +
+                "Group par tap karke uske apps chunein."
+            setPadding(0, 8, 0, 16)
+        }
+        root.addView(subtitle)
+
+        statusView = TextView(this)
         root.addView(statusView)
-        root.addView(UiKit.gap(this, 6))
 
-        root.addView(UiKit.section(this, "Mere App Groups"))
+        val section = TextView(this).apply {
+            text = "Mere App Groups"
+            textSize = 17f
+            setPadding(0, 20, 0, 8)
+        }
+        root.addView(section)
 
-        // Groups ki list ek safed card ke andar
-        val listCard = UiKit.card(this).apply {
+        groupListView = ListView(this).apply {
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f
             )
         }
-        groupListView = ListView(this).apply {
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            )
-            setBackgroundColor(android.graphics.Color.TRANSPARENT)
-            divider = null
-        }
-        listCard.addView(groupListView)
-        root.addView(listCard)
+        root.addView(groupListView)
 
-        val addBtn = UiKit.primaryButton(this, "+ Naya Group banao")
+        val addBtn = Button(this).apply { text = "+ Naya Group banao" }
         addBtn.setOnClickListener { showAddGroupDialog() }
         root.addView(addBtn)
 
-        val aiBtn = UiKit.accentButton(this, "✨ AI se Workflow banwao (Gemini)")
-        aiBtn.setOnClickListener {
-            startActivity(Intent(this, AiWorkflowActivity::class.java))
-        }
-        root.addView(aiBtn)
-
-        val packBtn = UiKit.secondaryButton(this, "Workflows — On/Off")
-        packBtn.setOnClickListener {
-            startActivity(Intent(this, WorkflowListActivity::class.java))
-        }
-        root.addView(packBtn)
-
-        val settingsBtn = UiKit.secondaryButton(this, "Settings — Time aur Limits")
-        settingsBtn.setOnClickListener {
-            startActivity(Intent(this, SettingsActivity::class.java))
-        }
-        root.addView(settingsBtn)
-
-        val wizardBtn = UiKit.secondaryButton(this, "Setup Wizard — Permissions")
+        val wizardBtn = Button(this).apply { text = "Setup Wizard — Permissions" }
         wizardBtn.setOnClickListener {
             startActivity(Intent(this, SetupWizardActivity::class.java))
         }
         root.addView(wizardBtn)
 
-        val logsBtn = UiKit.secondaryButton(this, "Logs / Console")
+        val packBtn = Button(this).apply { text = "Workflows — On/Off" }
+        packBtn.setOnClickListener {
+            startActivity(Intent(this, WorkflowListActivity::class.java))
+        }
+        root.addView(packBtn)
+
+        val settingsBtn = Button(this).apply { text = "Settings — Time aur Limits" }
+        settingsBtn.setOnClickListener {
+            startActivity(Intent(this, SettingsActivity::class.java))
+        }
+        root.addView(settingsBtn)
+
+        val logsBtn = Button(this).apply { text = "Logs / Console" }
         logsBtn.setOnClickListener {
             startActivity(Intent(this, LogsActivity::class.java))
         }
         root.addView(logsBtn)
 
-        val serviceBtn = UiKit.secondaryButton(this, "Care Service chalu karo")
+        val serviceBtn = Button(this).apply { text = "Care Service chalu karo" }
         serviceBtn.setOnClickListener {
             CareService.start(this)
             toast("Care Service chalu ho gaya — triggers live hain")
@@ -150,19 +141,18 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         refreshGroups()
-        refreshStatus()
     }
 
     private fun refreshStatus() {
         val count = WorkflowEngine.loadPack(this).size
-        statusView.text = "Workflows: kul $count load hue (pack + aapke banaye hue)"
+        statusView.text = "Workflow pack: $count workflows load hue (parsing OK)"
     }
 
     private fun refreshGroups() {
         groups = GroupStore.loadGroups(this)
         val labels = groups.map { g ->
-            if (g.packages.isEmpty()) "${g.name}  •  0 apps"
-            else "${g.name}  •  ${g.packages.size} apps"
+            if (g.packages.isEmpty()) "${g.name} • 0 apps"
+            else "${g.name} • ${g.packages.size} apps"
         }
         groupListView.adapter = ArrayAdapter(
             this, android.R.layout.simple_list_item_1, labels

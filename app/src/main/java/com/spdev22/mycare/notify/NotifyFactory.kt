@@ -4,6 +4,7 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.app.RemoteInput
 import android.content.Context
 import android.content.Intent
 import android.os.Build
@@ -21,17 +22,13 @@ import com.spdev22.mycare.ui.TrampolineActivity
  *
  * Saare button PendingIntents TrampolineActivity ko jaate hain (activity
  * PendingIntent = user ke tap se activity-start ki poori ijaazat milti
- * hai, background se bhi).
+ * hai, background se bhi). RemoteInput wala PendingIntent bhi wahi
+ * jaata hai — bas woh MUTABLE hota hai taaki system title bhar sake.
  *
  * Phase 3 jod: popup bot type (D7) — workflow popup ho to notification
  * par tap PopupActivity kholta hai jahan saare buttons milte hain;
  * multi-step flows ke liye postStep; ek-button wali plain suchna ke
  * liye postActionPlain; aur har fire ka LogStore me record.
- *
- * 0.2.5: Alarm Suggestion ka RemoteInput wala title-step HATA diya
- * gaya — ab woh sirf "Clock kholo" button deta hai (user khud Clock
- * app me alarm lagata hai; XOS par programmatic set_alarm bharosemand
- * nahi tha — user ka saaf directive).
  */
 object NotifyFactory {
 
@@ -41,6 +38,8 @@ object NotifyFactory {
     const val EXTRA_NOTIF = "extra_notif"
     const val EXTRA_ACTION = "extra_action"
     const val EXTRA_ARGS = "extra_args"
+
+    const val KEY_ALARM_TITLE = "alarm_title"
 
     fun ensureChannel(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -185,6 +184,55 @@ object NotifyFactory {
         LogStore.log(context, "STEP ${wf.id} → ${step.id} — $title")
     }
 
+    /**
+     * Alarm Suggestion ka doosra step: title likhne wali notification.
+     * User title bhejega to TrampolineActivity alarm laga degi.
+     */
+    fun postAlarmInput(context: Context, wf: Workflow) {
+        ensureChannel(context)
+        val notifId = notifIdFor(wf.id) + 1
+
+        val remoteInput = RemoteInput.Builder(KEY_ALARM_TITLE)
+            .setLabel("Alarm ka title likhiye — time chahiye to 7:30 bhi jod dein")
+            .build()
+
+        val intent = Intent(context, TrampolineActivity::class.java).apply {
+            action = "com.spdev22.mycare.TRAMP_" + notifId + "_input"
+            putExtra(EXTRA_WF, wf.id)
+            putExtra(EXTRA_NOTIF, notifId)
+            putExtra(EXTRA_ACTION, "alarm_submit")
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        }
+        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
+        } else {
+            PendingIntent.FLAG_UPDATE_CURRENT
+        }
+        val pi = PendingIntent.getActivity(context, notifId, intent, flags)
+
+        val action = Notification.Action.Builder(
+            android.R.drawable.ic_input_add, "Title bhejo", pi
+        ).addRemoteInput(remoteInput).build()
+
+        val notification = newBuilder(context)
+            .setContentTitle("Alarm ka title? ⏰")
+            .setContentText("Neeche box me title likhkar bhejo, Boss. Sirf time " +
+                "chahiye to khali title bhi chalega — subah 6:00 ka alarm lagega.")
+            .setStyle(
+                Notification.BigTextStyle().bigText(
+                    "Title likhiye — jaise \"Gym jaana hai\". Agar alarm ka time " +
+                        "6:00 se alag chahiye to saath me time bhi likh dein, " +
+                        "jaise \"Gym 7:30\"."
+                )
+            )
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .addAction(action)
+            .setAutoCancel(true)
+            .build()
+
+        manager(context)?.notify(notifId, notification)
+    }
+
     /** Chhoti si plain notification — confirmation ya jaankari ke liye. */
     fun postPlain(context: Context, id: Int, title: String, text: String) {
         ensureChannel(context)
@@ -281,7 +329,7 @@ object NotifyFactory {
         "lock_phone" -> android.R.drawable.ic_lock_idle_lock
         "open_app" -> android.R.drawable.ic_media_play
         "skip" -> android.R.drawable.ic_menu_close_clear_cancel
-        "open_clock" -> android.R.drawable.ic_lock_idle_alarm
+        "alarm_input" -> android.R.drawable.ic_input_add
         "go_home" -> android.R.drawable.ic_menu_view
         else -> android.R.drawable.ic_dialog_info
     }

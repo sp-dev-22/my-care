@@ -7,6 +7,7 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
 import android.content.BroadcastReceiver
+import android.content.ContentUris
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -15,15 +16,14 @@ import android.database.ContentObserver
 import android.net.Uri
 import android.os.BatteryManager
 import android.os.Build
-import android.os.Environment
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.IBinder
 import android.provider.ContactsContract
+import android.provider.MediaStore
 import android.util.Log
 import com.spdev22.mycare.data.CareSettings
 import com.spdev22.mycare.data.LogStore
-import com.spdev22.mycare.data.UserWorkflowStore
 import com.spdev22.mycare.data.WorkflowOverrides
 import com.spdev22.mycare.data.WorkflowPrefs
 import com.spdev22.mycare.engine.CareChecks
@@ -35,8 +35,6 @@ import com.spdev22.mycare.engine.WorkflowEngine
 import com.spdev22.mycare.notify.DailyScheduler
 import com.spdev22.mycare.notify.NotifyFactory
 import com.spdev22.mycare.receiver.AlarmNotifyReceiver
-import com.spdev22.mycare.receiver.DeleteReceiver
-import java.io.File
 import java.util.Calendar
 
 /**
@@ -47,15 +45,9 @@ import java.util.Calendar
  *    (app_hopping, single_app_over, continuous_use_over) jaanchna
  *  - Din ka pehla unlock pakadna (first_unlock → Welcome Boss)
  *  - Roz wale time-triggers ko DailyScheduler se set rakhna
- *  - Phase 3: battery (full/low), paani interval, naya contact
- *    observer, naya app install (poll-diff), cache aur
+ *  - Phase 3: battery (full/low), paani interval, screenshot observer,
+ *    naya contact observer, naya app install (poll-diff), cache aur
  *    unused-apps ke dheere checks (CareChecks)
- *  - 0.2.5: screenshot ki pehchan ab FOLDER-WATCH se hai —
- *    Screenshots folders ko poll me scan karke "nayi file" pakadna
- *    (MediaStore ContentObserver XOS par bharosemand nahi tha —
- *    user ka saaf directive). User ke Gemini-se bane workflows bhi
- *    yahi chalte hain — UserWorkflowStore ka version badhte hi
- *    service apni list taaza kar leti hai.
  *
  * Saare thresholds CareSettings se aate hain (user ne badle ho to
  * woh, warna pack ke defaults) — D3 ka niyam.
@@ -69,11 +61,10 @@ class CareService : Service() {
     private var tracker: UsageTracker? = null
     private var pack: List<Workflow> = emptyList()
     private var unlockReceiver: BroadcastReceiver? = null
+    private var screenshotObserver: ContentObserver? = null
     private var contactObserver: ContentObserver? = null
+    private var lastShotCheckMs: Long = 0L
     private var lastContactCheckMs: Long = 0L
-    /** User workflows ka dekha hua version — badle to list taaza karo. */
-    private var wfVersionSeen: Long = -1L
-    private var lastShotPermLogMs: Long = 0L
 
     private val pollRunnable = object : Runnable {
         override fun run() {
@@ -96,7 +87,6 @@ class CareService : Service() {
 
         tracker = UsageTracker(this)
         pack = WorkflowEngine.loadPack(this)
-        wfVersionSeen = UserWorkflowStore.version(this)
         DailyScheduler.scheduleAll(this)
         registerUnlockReceiver()
 
@@ -116,6 +106,13 @@ class CareService : Service() {
 
     override fun onDestroy() {
         handler?.removeCallbacks(pollRunnable)
+        screenshotObserver?.let {
+            try {
+                contentResolver.unregisterContentObserver(it)
+            } catch (e: Exception) {
+                // pehle se unregister — koi baat nahi
+            }
+        }
         contactObserver?.let {
             try {
                 contentResolver.unregisterContentObserver(it)
@@ -139,21 +136,6 @@ class CareService : Service() {
     private fun pollOnce() {
         val t = tracker ?: return
         val now = System.currentTimeMillis()
-
-        // 0.2.5: user ne naya workflow banaya/delete kiya ho to
-        // bina service restart kiye taazi list utha lo — roz wale
-        // time alarms bhi nayi list se dobara set kar do.
-        val wfVersion = UserWorkflowStore.version(this)
-        if (wfVersionSeen >= 0 && wfVersion != wfVersionSeen) {
-            pack = WorkflowEngine.loadPack(this)
-            DailyScheduler.scheduleAll(this)
-            LogStore.log(this, "Workflows taaza hue — kul ${pack.size} (pack + user ke banaye)")
-        }
-        wfVersionSeen = wfVersion
-
-        // 0.2.5: screenshot folder-watch (poll ke saath)
-        checkScreenshotFolders(now)
-
         val usageOk = t.poll() // Usage Access nahi to usage triggers band, baaki chalte rahenge
         val batt = batteryInfo()
         for (packWf in pack) {
@@ -428,15 +410,38 @@ class CareService : Service() {
         }
     }
 
-    // ---------------- Phase 3: contact observer ----------------
+    // ---------------- Phase 3: observers (screenshot + contact) ----------------
 
     private fun registerObservers() {
         val h = handler ?: return
+        // Screenshot baseline: purana screenshot fire na ho
+        if (CareSettings.stateLong(this, "state_last_shot_id") == 0L) {
+            latestScreenshot()?.let { (id, _) ->
+                CareSettings.setStateLong(this, "state_last_shot_id", id)
+            }
+        }
         // Contact baseline: pehle se saved contacts fire na hon
         if (CareSettings.stateLong(this, "state_last_contact_id") == 0L) {
             latestContactId()?.let {
                 CareSettings.setStateLong(this, "state_last_contact_id", it)
             }
+        }
+        try {
+            val shotObs = object : ContentObserver(h) {
+                override fun onChange(selfChange: Boolean) {
+                    maybeScreenshot()
+                }
+
+                override fun onChange(selfChange: Boolean, uri: Uri?) {
+                    maybeScreenshot()
+                }
+            }
+            contentResolver.registerContentObserver(
+                MediaStore.Images.Media.EXTERNAL_CONTENT_URI, true, shotObs
+            )
+            screenshotObserver = shotObs
+        } catch (e: Exception) {
+            Log.w(TAG, "Screenshot observer fail: ${e.message}")
         }
         try {
             val contactObs = object : ContentObserver(h) {
@@ -455,6 +460,45 @@ class CareService : Service() {
         } catch (e: Exception) {
             Log.w(TAG, "Contact observer fail: ${e.message}")
         }
+    }
+
+    /** Sabse naya screenshot: (id, uri) — na mile to null. */
+    private fun latestScreenshot(): Pair<Long, Uri>? {
+        return try {
+            val uri = MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+            val projection = arrayOf(
+                MediaStore.Images.Media._ID,
+                MediaStore.Images.Media.DISPLAY_NAME
+            )
+            contentResolver.query(
+                uri, projection, null, null,
+                MediaStore.Images.Media.DATE_ADDED + " DESC"
+            )?.use { cursor ->
+                if (!cursor.moveToFirst()) return null
+                val id = cursor.getLong(0)
+                val name = cursor.getString(1) ?: ""
+                if (!name.contains("screenshot", ignoreCase = true)) return null
+                id to ContentUris.withAppendedId(uri, id)
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private fun maybeScreenshot() {
+        val now = System.currentTimeMillis()
+        if (now - lastShotCheckMs < 4_000L) return
+        lastShotCheckMs = now
+        val wf = pack.firstOrNull { it.triggerType == "screenshot_taken" }
+            ?.takeIf { WorkflowPrefs.isEnabled(this, it) }
+            ?.let { WorkflowOverrides.effective(this, it) }
+            ?: return
+        val latest = latestScreenshot() ?: return
+        val (id, uri) = latest
+        if (id == CareSettings.stateLong(this, "state_last_shot_id")) return
+        CareSettings.setStateLong(this, "state_last_shot_id", id)
+        CareSettings.setStateStr(this, "state_screenshot_uri", uri.toString())
+        NotifyFactory.postWorkflow(this, wf)
     }
 
     private fun latestContactId(): Long? {
@@ -539,119 +583,6 @@ class CareService : Service() {
         }
     }
 
-    // ---------------- 0.2.5: screenshot folder-watch ----------------
-    //
-    // MediaStore ContentObserver XOS par chal hi nahi raha tha —
-    // user ka directive: seedha Screenshots FOLDERS par nazar rakho.
-    // Har poll me chaar standard folders scan hote hain; pehle se
-    // dekhi hui files ka set prefs me rehta hai ("state_shot_seen_v2":
-    // har line "path|lastModified"). Nayi image file = screenshot
-    // liya gaya.
-    //
-    // PEHLI baar (baseline): maujooda saari files "dekhi hui" maan
-    // li jaati hain — purane screenshots par fire NAHI hoga.
-
-    private fun checkScreenshotFolders(now: Long) {
-        val packWf = pack.firstOrNull { it.triggerType == "screenshot_taken" }
-            ?: return
-        val base = try {
-            Environment.getExternalStorageDirectory()
-        } catch (e: Exception) {
-            null
-        } ?: return
-
-        var anyListable = false
-        val files = mutableListOf<File>()
-        for (rel in SHOT_DIRS) {
-            val dir = File(base, rel)
-            val listed = try {
-                dir.listFiles()
-            } catch (e: Exception) {
-                null
-            }
-            if (listed != null) {
-                anyListable = true
-                for (f in listed) {
-                    if (f.isFile && isImageFile(f.name)) files.add(f)
-                }
-            }
-        }
-        if (!anyListable) {
-            // Koi folder padh hi nahi paye — aksar Photos/Media
-            // permission na milne se hota hai. Ghante me ek baar bolo.
-            if (now - lastShotPermLogMs > 60 * 60_000L) {
-                lastShotPermLogMs = now
-                LogStore.log(
-                    this,
-                    "Screenshot folder-watch: folders padh nahi paya — " +
-                        "Photos/Media permission check karein (Setup Wizard)"
-                )
-            }
-            return
-        }
-
-        val seenRaw = CareSettings.stateStr(this, KEY_SHOT_SEEN)
-        if (seenRaw == null) {
-            saveShotSeen(files)
-            LogStore.log(
-                this,
-                "Screenshot folder-watch baseline: ${files.size} purani " +
-                    "files dekhi hui maani gayin (fire nahi hongi)"
-            )
-            return
-        }
-        val seen = parseShotSeen(seenRaw)
-        val fresh = files.filter { it.absolutePath !in seen }
-        // Seen-set hamesha taaza rakho — delete hui files khud ghatein
-        saveShotSeen(files)
-        if (fresh.isEmpty()) return
-
-        // Ek poll me kai nayi files hon to sirf SABSE NAYI par fire
-        // (notification spam na ho); baaki seen-set me chali gayin
-        val newest = fresh.maxByOrNull { it.lastModified() } ?: return
-        val folderName = newest.parentFile?.name ?: ""
-        LogStore.log(
-            this,
-            "Screenshot detect (folder watch): $folderName/${newest.name}"
-        )
-        if (!WorkflowPrefs.isEnabled(this, packWf)) {
-            LogStore.log(this, "Screenshot mila par Screenshot Safai OFF hai — fire nahi")
-            return
-        }
-        val wf = WorkflowOverrides.effective(this, packWf)
-        // Delete flow ke liye path (asal bharosa) + mile to MediaStore URI
-        CareSettings.setStateStr(this, "state_screenshot_path", newest.absolutePath)
-        val uri = DeleteReceiver.mediaUriForPath(this, newest.absolutePath)
-        CareSettings.setStateStr(this, "state_screenshot_uri", uri?.toString() ?: "")
-        NotifyFactory.postWorkflow(this, wf)
-    }
-
-    private fun isImageFile(name: String): Boolean {
-        val n = name.lowercase()
-        return n.endsWith(".png") || n.endsWith(".jpg") ||
-            n.endsWith(".jpeg") || n.endsWith(".webp")
-    }
-
-    private fun parseShotSeen(raw: String): Map<String, Long> {
-        val map = mutableMapOf<String, Long>()
-        for (line in raw.split("\n")) {
-            val cut = line.lastIndexOf('|')
-            if (cut <= 0) continue
-            map[line.substring(0, cut)] =
-                line.substring(cut + 1).toLongOrNull() ?: 0L
-        }
-        return map
-    }
-
-    private fun saveShotSeen(files: List<File>) {
-        // Prefs halka rakho — sabse nayi 300 files ka record kaafi hai
-        val kept = files.sortedByDescending { it.lastModified() }.take(300)
-        val raw = kept.joinToString("\n") {
-            "${it.absolutePath}|${it.lastModified()}"
-        }
-        CareSettings.setStateStr(this, KEY_SHOT_SEEN, raw)
-    }
-
     // ---------------- first unlock (Welcome Boss) ----------------
 
     private fun registerUnlockReceiver() {
@@ -716,15 +647,6 @@ class CareService : Service() {
         private const val CHANNEL_ID = "care_service"
         private const val NOTIF_ID = 1001
         private const val POLL_INTERVAL_MS = 20_000L
-
-        /** Folder-watch wale screenshot folders (shared storage ke andar). */
-        private val SHOT_DIRS = listOf(
-            "Pictures/Screenshots", "DCIM/Screenshots",
-            "Pictures/Screenshot", "DCIM/Screenshot"
-        )
-
-        /** Dekhi hui screenshot files ke set wali state key. */
-        private const val KEY_SHOT_SEEN = "state_shot_seen_v2"
 
         fun start(context: Context) {
             val intent = Intent(context, CareService::class.java)
