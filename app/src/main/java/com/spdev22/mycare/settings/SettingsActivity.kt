@@ -44,85 +44,90 @@ class SettingsActivity : Activity() {
 
     private fun buildUi() {
         val root = UiKit.root(this)
-        setContentView(UiKit.scroll(this, root))
+        UiKit.tabScreen(this, root, UiKit.TAB_SETTINGS)
 
         root.addView(UiKit.title(this, "Settings"))
         root.addView(
             UiKit.subtitle(
                 this,
-                "Boss, saare time aur limits yahan se badle ja sakte hain. " +
-                    "Badlav turant lagu ho jata hai."
+                "Boss, every time and limit can be changed here. " +
+                    "Changes apply immediately."
             )
         )
 
-        sectionLabel(root, "Roz ke Suggestions")
+        sectionLabel(root, "Daily Suggestions")
         timeRow(root, "Study Suggestion", "study_time", CareSettings.DEFAULT_STUDY_TIME)
-        timeRow(root, "Aaj Ka Hisaab", "hisaab_time", CareSettings.DEFAULT_HISAAB_TIME)
+        timeRow(root, "Daily Account (Hisaab)", "hisaab_time", CareSettings.DEFAULT_HISAAB_TIME)
         timeRow(root, "Alarm Suggestion", "alarm_time", CareSettings.DEFAULT_ALARM_TIME)
 
         sectionLabel(root, "Limits (minutes)")
         intRow(
-            root, "Ek app lagatar chale to suggestion",
+            root, "Suggest a break when one app runs this long",
             CareSettings.KEY_LONG_MINUTES, CareSettings.DEFAULT_LONG_MINUTES, "min"
         )
         intRow(
-            root, "Lagatar phone use par araam ka nudge",
+            root, "Rest nudge after continuous phone use of",
             CareSettings.KEY_REST_MINUTES, CareSettings.DEFAULT_REST_MINUTES, "min"
         )
 
         sectionLabel(root, "Boredom Detection")
         intRow(
-            root, "Kitne apps khul-bund hon",
+            root, "How many apps open-close in the pattern",
             CareSettings.KEY_BOREDOM_APPS, CareSettings.DEFAULT_BOREDOM_APPS, "apps"
         )
         intRow(
-            root, "Har app itne seconds se kam chale",
+            root, "Each app used less than (seconds)",
             CareSettings.KEY_BOREDOM_SECONDS, CareSettings.DEFAULT_BOREDOM_SECONDS, "sec"
         )
 
-        sectionLabel(root, "Phone Care (Phase 3)")
+        sectionLabel(root, "Phone Care")
         intRow(
-            root, "Paani Reminder — har itne ghante me",
-            CareSettings.KEY_PAANI_HOURS, CareSettings.DEFAULT_PAANI_HOURS, "ghante"
+            root, "Water Reminder — every how many hours",
+            CareSettings.KEY_PAANI_HOURS, CareSettings.DEFAULT_PAANI_HOURS, "hours"
         )
         intRow(
-            root, "Battery Low warning — is % par ya neeche",
+            root, "Battery Low warning — at or below this %",
             CareSettings.KEY_BATTERY_LOW, CareSettings.DEFAULT_BATTERY_LOW, "%"
         )
         intRow(
-            root, "Cache Safai — kisi app ka cache isse bada ho to",
+            root, "Cache Cleanup — when an app's cache grows beyond",
             CareSettings.KEY_CACHE_MB, CareSettings.DEFAULT_CACHE_MB, "MB"
+        )
+        intRow(
+            root, "Intruder Alert — wrong unlock attempts before the alert + photo",
+            CareSettings.KEY_INTRUDER_THRESHOLD, CareSettings.DEFAULT_INTRUDER_THRESHOLD, "attempts"
         )
 
         sectionLabel(root, "Action Target Apps")
         root.addView(TextView(this).apply {
-            text = "Notification ke buttons kaun sa app kholenge, yahan se chunein. " +
-                "Clock wala app Alarm Suggestion par KHULEGA (0.2.5) — " +
-                "alarm aap wahi se khud set karte hain."
+            text = "Choose which app the notification buttons will open. " +
+                "The Clock app OPENS when you tap the Alarm Suggestion " +
+                "button — you set the alarm there yourself."
             setPadding(0, 0, 0, 4)
         })
         slotRow(root, "Music button", "music")
         slotRow(root, "Videos / YouTube button", "video")
         slotRow(root, "Muse AI / WhatsApp button", "chat")
-        slotRow(root, "Alarm ke liye Clock app", "clock")
+        slotRow(root, "Clock app for alarms", "clock")
 
-        sectionLabel(root, "Workflows ke liye zaroori Groups")
+        sectionLabel(root, "Groups that workflows need")
         root.addView(TextView(this).apply {
-            text = "Aaj Ka Hisaab jaise workflows App Groups ko NAAM se " +
-                "pehchante hain. Yeh do naam ke group bane hone chahiye — " +
-                "warna hisaab me padhai aur manoranjan alag nahi hoga. " +
-                "Group banakar Main screen se unme apps jod dijiye."
+            text = "Workflows like the Daily Account recognise App " +
+                "Groups BY NAME. These two groups should exist — " +
+                "otherwise the account cannot separate study from " +
+                "entertainment. Create a group here, then add its " +
+                "apps from the Home tab."
             setPadding(0, 0, 0, 4)
         })
-        requiredGroupRow(root, HisaabBuilder.STUDY_GROUP_NAME, "padhai / study wale apps ke liye")
-        requiredGroupRow(root, HisaabBuilder.ENTERTAINMENT_GROUP_NAME, "manoranjan / entertainment wale apps ke liye")
+        requiredGroupRow(root, HisaabBuilder.STUDY_GROUP_NAME, "for study apps")
+        requiredGroupRow(root, HisaabBuilder.ENTERTAINMENT_GROUP_NAME, "for entertainment apps")
 
-        sectionLabel(root, "Gemini AI — Workflow Banwao")
+        sectionLabel(root, "Gemini AI — Make Workflows")
         root.addView(TextView(this).apply {
-            text = "'AI se Workflow banwao' ke liye aapki apni Gemini API " +
-                "key chahiye. Key SIRF is phone me rehti hai — kahin " +
-                "upload nahi hoti. Internet sirf tab chalta hai jab " +
-                "aap 'Banwao' dabate hain."
+            text = "'Make a Workflow with AI' needs your own Gemini " +
+                "API key. The key stays ONLY on this phone — it is " +
+                "never uploaded anywhere. Internet is used only when " +
+                "you tap 'Create it'."
             setPadding(0, 0, 0, 4)
         })
         geminiKeyRow(root)
@@ -131,7 +136,7 @@ class SettingsActivity : Activity() {
         sectionLabel(root, "Welcome")
         val welcomeCard = UiKit.card(this)
         val welcomeBox = CheckBox(this).apply {
-            text = "Welcome Boss — din ke pehle unlock par"
+            text = "Welcome Boss — on the first unlock of the day"
             isChecked = CareSettings.welcomeEnabled(this@SettingsActivity)
             textSize = 16f
             setTextColor(UiKit.INK)
@@ -144,17 +149,17 @@ class SettingsActivity : Activity() {
         welcomeCard.addView(welcomeBox)
         root.addView(welcomeCard)
 
-        root.addView(UiKit.small(this, "Note: Koi value badalna = sirf aapke liye. Pack ke " +
-            "baaki workflows apne defaults par chalte rahenge."))
+        root.addView(UiKit.small(this, "Note: changing a value affects only you. " +
+            "The pack's other workflows keep running on their defaults."))
     }
 
     /** Gemini API key wali kataar — sthiti dikhao, tap = badlo/hatayo. */
     private fun geminiKeyRow(root: LinearLayout) {
         val key = CareSettings.geminiKey(this)
         val status = if (key == null) {
-            "nahi set ✗ — tap karke daalein"
+            "not set ❌ — tap to add it"
         } else {
-            "set hai ✓ (…${key.takeLast(4)}) — tap karke badlein"
+            "is set ✅ (…${key.takeLast(4)}) — tap to change"
         }
         val row = TextView(this).apply {
             text = "Gemini API Key — $status"
@@ -174,7 +179,7 @@ class SettingsActivity : Activity() {
 
     private fun showGeminiKeyDialog() {
         val input = EditText(this).apply {
-            hint = "AIza… wali Gemini API key yahan chipkayein"
+            hint = "Paste your Gemini API key (starts with AIza…) here"
             // Password-shailee ka input — kandhe ke peeche se koi na padhe
             inputType = InputType.TYPE_CLASS_TEXT or
                 InputType.TYPE_TEXT_VARIATION_PASSWORD
@@ -186,16 +191,16 @@ class SettingsActivity : Activity() {
             .setPositiveButton("Save") { _, _ ->
                 val value = input.text.toString().trim()
                 if (value.isEmpty()) {
-                    toast("Key khaali hai, Boss — hatani ho to 'Key hatayein' dabayein")
+                    toast("The key is empty, Boss — use 'Remove key' if you want to remove it")
                 } else {
                     CareSettings.setGeminiKey(this, value)
-                    toast("Gemini key save ho gayi ✓")
+                    toast("Gemini key saved ✅")
                     buildUi()
                 }
             }
-            .setNeutralButton("Key hatayein") { _, _ ->
+            .setNeutralButton("Remove key") { _, _ ->
                 CareSettings.setGeminiKey(this, null)
-                toast("Gemini key hata di gayi")
+                toast("Gemini key removed")
                 buildUi()
             }
             .setNegativeButton("Cancel", null)
@@ -206,7 +211,7 @@ class SettingsActivity : Activity() {
     private fun geminiModelRow(root: LinearLayout) {
         val current = CareSettings.geminiModel(this)
         val row = TextView(this).apply {
-            text = "Gemini Model — $current  (badalne ke liye tap karein)"
+            text = "Gemini Model — $current  (tap to change)"
             textSize = 16f
             setTextColor(UiKit.INK)
             setPadding(0, 10, 0, 10)
@@ -217,7 +222,7 @@ class SettingsActivity : Activity() {
             setOnClickListener {
                 val input = EditText(this@SettingsActivity).apply {
                     setText(current)
-                    hint = "jaise gemini-2.0-flash"
+                    hint = "e.g. gemini-2.0-flash"
                     setSingleLine(true)
                 }
                 AlertDialog.Builder(this@SettingsActivity)
@@ -227,10 +232,10 @@ class SettingsActivity : Activity() {
                         val value = input.text.toString().trim()
                         if (value.isNotEmpty()) {
                             CareSettings.setGeminiModel(this@SettingsActivity, value)
-                            toast("Model set ho gaya: $value")
+                            toast("Model set: $value")
                             buildUi()
                         } else {
-                            toast("Model ka naam khaali nahi ho sakta, Boss")
+                            toast("The model name cannot be empty, Boss")
                         }
                     }
                     .setNegativeButton("Cancel", null)
@@ -254,7 +259,7 @@ class SettingsActivity : Activity() {
     ) {
         val current = CareSettings.time(this, settingsKey, default)
         val row = TextView(this).apply {
-            text = "$label — $current  (badalne ke liye tap karein)"
+            text = "$label — $current  (tap to change)"
             textSize = 16f
             setTextColor(UiKit.INK)
             setPadding(0, 10, 0, 10)
@@ -270,7 +275,7 @@ class SettingsActivity : Activity() {
                     val value = "%02d:%02d".format(hour, minute)
                     CareSettings.setTime(this@SettingsActivity, settingsKey, value)
                     DailyScheduler.scheduleAll(this@SettingsActivity)
-                    toast("$label ab $value par set hai")
+                    toast("$label is now set to $value")
                     buildUi()
                 }, h, m, true).show()
             }
@@ -289,7 +294,7 @@ class SettingsActivity : Activity() {
     ) {
         val current = CareSettings.intVal(this, key, default)
         val row = TextView(this).apply {
-            text = "$label — $current $unit  (badalne ke liye tap karein)"
+            text = "$label — $current $unit  (tap to change)"
             textSize = 16f
             setTextColor(UiKit.INK)
             setPadding(0, 10, 0, 10)
@@ -301,7 +306,7 @@ class SettingsActivity : Activity() {
                 val input = EditText(this@SettingsActivity).apply {
                     inputType = InputType.TYPE_CLASS_NUMBER
                     setText(current.toString())
-                    hint = "Number likhein"
+                    hint = "Type a number"
                 }
                 AlertDialog.Builder(this@SettingsActivity)
                     .setTitle(label)
@@ -310,10 +315,10 @@ class SettingsActivity : Activity() {
                         val value = input.text.toString().toIntOrNull()
                         if (value != null && value > 0) {
                             CareSettings.setInt(this@SettingsActivity, key, value)
-                            toast("Set ho gaya: $value $unit")
+                            toast("Set: $value $unit")
                             buildUi()
                         } else {
-                            toast("Sahi number likhein, Boss")
+                            toast("Please type a valid number, Boss")
                         }
                     }
                     .setNegativeButton("Cancel", null)
@@ -337,24 +342,24 @@ class SettingsActivity : Activity() {
         val card = UiKit.card(this)
         if (exists) {
             card.addView(TextView(this).apply {
-                text = "$name — bana hai ✓  ($hint)"
+                text = "$name — exists ✅  ($hint)"
                 textSize = 16f
                 setTextColor(UiKit.INK)
                 setPadding(0, 10, 0, 10)
             })
         } else {
             card.addView(TextView(this).apply {
-                text = "$name — nahi bana ✗  ($hint)"
+                text = "$name — not created ❌  ($hint)"
                 textSize = 16f
                 setTextColor(UiKit.INK)
                 setPadding(0, 10, 0, 2)
             })
-            card.addView(UiKit.primaryButton(this, "'$name' group banao").apply {
+            card.addView(UiKit.primaryButton(this, "Create the '$name' group").apply {
                 setOnClickListener {
                     if (GroupStore.addGroup(this@SettingsActivity, name)) {
-                        toast("'$name' group ban gaya — Main screen se isme apps jod dijiye")
+                        toast("'$name' group created — add its apps from the Home tab")
                     } else {
-                        toast("Group pehle se hai, Boss")
+                        toast("The group already exists, Boss")
                     }
                     buildUi()
                 }
@@ -376,7 +381,7 @@ class SettingsActivity : Activity() {
             }
         }
         val row = TextView(this).apply {
-            text = "$label — $currentLabel  (badalne ke liye tap karein)"
+            text = "$label — $currentLabel  (tap to change)"
             textSize = 16f
             setTextColor(UiKit.INK)
             setPadding(0, 10, 0, 10)

@@ -45,12 +45,12 @@ object LogStore {
             val file = File(context.filesDir, FILE_NAME)
             if (file.exists()) {
                 val text = file.readText().trim()
-                if (text.isEmpty()) "Abhi koi log nahi hai, Boss." else text
+                if (text.isEmpty()) "No logs yet, Boss." else text
             } else {
-                "Abhi koi log nahi hai, Boss."
+                "No logs yet, Boss."
             }
         } catch (e: Exception) {
-            "Log padh nahi paya: ${e.message}"
+            "Could not read logs: ${e.message}"
         }
     }
 

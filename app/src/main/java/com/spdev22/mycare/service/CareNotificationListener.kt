@@ -45,12 +45,12 @@ class CareNotificationListener : NotificationListenerService() {
 
     override fun onListenerConnected() {
         super.onListenerConnected()
-        LogStore.log(this, "Notification listener jud gaya — notification_posted trigger live")
+        LogStore.log(this, "Notification listener connected — notification_posted trigger is live")
     }
 
     override fun onListenerDisconnected() {
         super.onListenerDisconnected()
-        LogStore.log(this, "Notification listener kat gaya")
+        LogStore.log(this, "Notification listener disconnected")
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification?) {

@@ -22,7 +22,7 @@ class AlarmNotifyReceiver : BroadcastReceiver() {
         val text = intent.getStringExtra(EXTRA_TEXT) ?: ""
         val id = intent.getIntExtra(EXTRA_ID, 9901)
         NotifyFactory.postPlain(context, id, title, text)
-        LogStore.log(context, "Alarm-style notification fire: $title")
+        LogStore.log(context, "Alarm-style notification fired: $title")
     }
 
     companion object {

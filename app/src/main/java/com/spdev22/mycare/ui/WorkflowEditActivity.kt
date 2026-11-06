@@ -19,6 +19,7 @@ import com.spdev22.mycare.data.WorkflowPrefs
 import com.spdev22.mycare.engine.Workflow
 import com.spdev22.mycare.engine.WorkflowEngine
 import com.spdev22.mycare.notify.DailyScheduler
+import com.spdev22.mycare.setup.WorkflowPermissions
 
 /**
  * Workflow Edit (Editor-lite, 0.2.3) — pack ke kisi workflow ka
@@ -50,7 +51,7 @@ class WorkflowEditActivity : Activity() {
         val wfId = intent.getStringExtra(EXTRA_WF) ?: ""
         val found = WorkflowEngine.loadPack(this).firstOrNull { it.id == wfId }
         if (found == null) {
-            Toast.makeText(this, "Workflow nahi mila, Boss", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Workflow not found, Boss", Toast.LENGTH_SHORT).show()
             finish()
             return
         }
@@ -64,18 +65,18 @@ class WorkflowEditActivity : Activity() {
         root.addView(
             UiKit.subtitle(
                 this,
-                "Message, samay aur limits yahan badlein, Boss. Pack " +
-                    "waise ka waisa rahega — aapki edits uske upar ek layer " +
-                    "ki tarah lagu hongi, aur reset kabhi bhi ho sakta hai."
+                "Change the message, time and limits here, Boss. The " +
+                    "pack itself stays untouched — your edits apply as " +
+                    "a layer on top of it, and can be reset any time."
             )
         )
         if (WorkflowOverrides.hasOverrides(this, packWf.id)) {
-            root.addView(UiKit.small(this, "✏️ Is workflow par aapke custom edits lagu hain."))
+            root.addView(UiKit.small(this, "✏️ Your custom edits are active on this workflow."))
             root.addView(UiKit.gap(this, 4))
         }
         val isUserWorkflow = UserWorkflowStore.contains(this, packWf.id)
         if (isUserWorkflow) {
-            root.addView(UiKit.small(this, "✨ Yeh aapka apna (AI se banaya) workflow hai — neeche se delete bhi ho sakta hai."))
+            root.addView(UiKit.small(this, "✨ This is your own (AI-created) workflow — you can delete it below."))
             root.addView(UiKit.gap(this, 4))
         }
 
@@ -99,23 +100,23 @@ class WorkflowEditActivity : Activity() {
         // ---------- Samay (sirf 'time' trigger) ----------
         val packTime = packWf.triggerParams["time"]
         if (packWf.triggerType == "time" && packTime != null) {
-            section(root, "Samay (roz ka time)")
+            section(root, "Time (daily)")
             chosenTime = eff.triggerParams["time"] ?: packTime
-            val timeBtn = UiKit.secondaryButton(this, "⏰ $chosenTime — badalne ke liye tap karein")
+            val timeBtn = UiKit.secondaryButton(this, "⏰ $chosenTime — tap to change")
             timeBtn.setOnClickListener {
                 val parts = (chosenTime ?: packTime).split(":")
                 val h = parts.getOrNull(0)?.toIntOrNull() ?: 8
                 val m = parts.getOrNull(1)?.toIntOrNull() ?: 0
                 TimePickerDialog(this, { _, hour, minute ->
                     chosenTime = String.format("%02d:%02d", hour, minute)
-                    timeBtn.text = "⏰ $chosenTime — badalne ke liye tap karein"
+                    timeBtn.text = "⏰ $chosenTime — tap to change"
                 }, h, m, true).show()
             }
             root.addView(timeBtn)
             if (packWf.triggerParams.containsKey("settings_key")) {
-                root.addView(UiKit.small(this, "Note: yeh is workflow ka apna samay hai — " +
-                    "Settings screen wale samay se upar yahi chalega. " +
-                    "Reset karne par Settings wala samay wapas lagu hoga."))
+                root.addView(UiKit.small(this, "Note: this is the workflow's own time — " +
+                    "it wins over the Settings screen time for this workflow. " +
+                    "Resetting brings the Settings time back."))
             }
         }
 
@@ -136,7 +137,7 @@ class WorkflowEditActivity : Activity() {
         }
 
         // ---------- Fixed jaankari (read-only) ----------
-        section(root, "Fixed cheezein (badal nahi sakti)")
+        section(root, "Fixed things (cannot change)")
         val fixedCard = UiKit.card(this)
         val fixed = StringBuilder()
         fixed.append("Trigger: ${packWf.triggerType}")
@@ -165,18 +166,18 @@ class WorkflowEditActivity : Activity() {
 
         // ---------- Save / Reset ----------
         root.addView(UiKit.gap(this, 6))
-        val saveBtn = UiKit.primaryButton(this, "Save karo")
+        val saveBtn = UiKit.primaryButton(this, "Save")
         saveBtn.setOnClickListener { save() }
         root.addView(saveBtn)
 
-        val resetBtn = UiKit.secondaryButton(this, "Pack default par reset")
+        val resetBtn = UiKit.secondaryButton(this, "Reset to pack default")
         resetBtn.setOnClickListener { resetAll() }
         root.addView(resetBtn)
 
         // ---------- Delete (sirf user ke apne workflows) ----------
         if (isUserWorkflow) {
-            section(root, "Apna workflow hatayein")
-            val delBtn = UiKit.dangerButton(this, "🗑️ Yeh workflow delete karo")
+            section(root, "Remove your workflow")
+            val delBtn = UiKit.dangerButton(this, "🗑️ Delete this workflow")
             delBtn.setOnClickListener { confirmDelete() }
             root.addView(delBtn)
         }
@@ -185,10 +186,10 @@ class WorkflowEditActivity : Activity() {
     /** User ke apne workflow ko pakki taur par hatana — pucca karke. */
     private fun confirmDelete() {
         AlertDialog.Builder(this)
-            .setTitle("Workflow delete karein?")
+            .setTitle("Delete this workflow?")
             .setMessage(
-                "'${packWf.name}' hamesha ke liye hat jayega, Boss. " +
-                    "Uske saare edits aur On/Off sthiti bhi saaf ho jayegi."
+                "'${packWf.name}' will be removed forever, Boss. " +
+                    "All its edits and its On/Off state will also be cleared."
             )
             .setPositiveButton("Delete") { _, _ ->
                 if (packWf.triggerType == "time") {
@@ -197,8 +198,8 @@ class WorkflowEditActivity : Activity() {
                 UserWorkflowStore.delete(this, packWf.id)
                 WorkflowOverrides.reset(this, packWf.id)
                 WorkflowPrefs.clearOverride(this, packWf.id)
-                LogStore.log(this, "User workflow [${packWf.id}] delete hua (Editor)")
-                toast("Workflow delete ho gaya, Boss")
+                LogStore.log(this, "User workflow [${packWf.id}] deleted (Editor)")
+                toast("Workflow deleted, Boss")
                 finish()
             }
             .setNegativeButton("Cancel", null)
@@ -226,15 +227,16 @@ class WorkflowEditActivity : Activity() {
 
     private fun labelFor(key: String): String = when (key) {
         "minutes" -> "Minutes (limit)"
-        "apps" -> "Apps ki sankhya"
-        "seconds" -> "Har app ke seconds"
+        "apps" -> "Number of apps"
+        "seconds" -> "Seconds per app"
         "window_minutes" -> "Window (minutes)"
         "cooldown_minutes" -> "Cooldown (minutes)"
-        "hours" -> "Har kitne ghante (hours)"
+        "hours" -> "Every how many hours"
         "level" -> "Battery level (%)"
-        "after_minutes" -> "Alarm kitne minute baad (minutes)"
+        "percent" -> "Percent (%)"
+        "after_minutes" -> "Alarm after how many minutes"
         "cache_mb" -> "Cache limit (MB)"
-        "days" -> "Din (days)"
+        "days" -> "Days"
         else -> key
     }
 
@@ -242,7 +244,7 @@ class WorkflowEditActivity : Activity() {
         val newTitle = titleInput.text.toString().trim()
         val newText = textInput.text.toString().trim()
         if (newTitle.isEmpty() || newText.isEmpty()) {
-            toast("Title aur text khaali nahi ho sakte, Boss")
+            toast("Title and text cannot be empty, Boss")
             return
         }
         val trigOvr = mutableMapOf<String, String>()
@@ -250,7 +252,7 @@ class WorkflowEditActivity : Activity() {
         for ((key, et) in limitFields) {
             val num = et.text.toString().trim().toIntOrNull()
             if (num == null || num < 0) {
-                toast("'$key' ke liye sahi number daalein, Boss")
+                toast("Please enter a valid number for '$key', Boss")
                 return
             }
             val v = num.toString()
@@ -284,9 +286,17 @@ class WorkflowEditActivity : Activity() {
             // Samay/limits taaze hon — roz wala alarm nayi sthiti se set karo
             DailyScheduler.scheduleOne(this, packWf)
         }
-        LogStore.log(this, "Workflow [${packWf.id}] edit save hua (Editor-lite)")
-        toast("Save ho gaya, Boss ✅")
-        finish()
+        LogStore.log(this, "Workflow [${packWf.id}] edit saved (Editor-lite)")
+        toast("Saved, Boss ✅")
+        // 0.2.8: permission-on-enable also applies to the Editor —
+        // if this workflow is ON and permissions are missing, offer
+        // them now; the screen finishes when the prompt is dismissed
+        // (or immediately when nothing is missing).
+        if (WorkflowPrefs.isEnabled(this, packWf)) {
+            WorkflowPermissions.promptIfMissing(this, packWf) { finish() }
+        } else {
+            finish()
+        }
     }
 
     private fun resetAll() {
@@ -294,8 +304,8 @@ class WorkflowEditActivity : Activity() {
         if (packWf.triggerType == "time") {
             DailyScheduler.scheduleOne(this, packWf)
         }
-        LogStore.log(this, "Workflow [${packWf.id}] pack default par reset hua")
-        toast("Pack default par reset ho gaya, Boss")
+        LogStore.log(this, "Workflow [${packWf.id}] reset to pack default")
+        toast("Reset to pack default, Boss")
         finish()
     }
 

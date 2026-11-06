@@ -85,8 +85,8 @@ class TrampolineActivity : Activity() {
             LogStore.log(
                 this,
                 "Screenshot delete consent result: " +
-                    if (resultCode == RESULT_OK) "GRANTED (delete ho gaya)"
-                    else "DENIED/cancel (code=$resultCode)"
+                    if (resultCode == RESULT_OK) "GRANTED (deleted)"
+                    else "DENIED/cancelled (code=$resultCode)"
             )
             if (resultCode == RESULT_OK) {
                 // System ne confirm kiya aur file delete kar di
@@ -94,8 +94,8 @@ class TrampolineActivity : Activity() {
                 CareSettings.setStateStr(this, DeleteReceiver.KEY_DELETE_PATH, "")
                 NotifyFactory.postPlain(
                     this, NotifyFactory.notifIdFor("screenshot_safai") + 9,
-                    "Screenshot delete ho gaya 🧹",
-                    "Confirm karne ke liye dhanyavaad, Boss — screenshot saaf!"
+                    "Screenshot deleted 🧹",
+                    "Thanks for confirming, Boss — the screenshot is cleaned up!"
                 )
             }
         } catch (e: Exception) {
@@ -142,7 +142,7 @@ class TrampolineActivity : Activity() {
                                 .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                         )
                     } catch (e: Exception) {
-                        toast("Home nahi ja paya — Accessibility ON karke dekhein")
+                        toast("Could not go Home — try turning Accessibility ON")
                     }
                 }
             }
@@ -163,7 +163,7 @@ class TrampolineActivity : Activity() {
                                 .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                         )
                     } catch (e: Exception) {
-                        toast("App Info nahi khula, Boss")
+                        toast("App Info did not open, Boss")
                     }
                 }
             }
@@ -178,7 +178,7 @@ class TrampolineActivity : Activity() {
                                 .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                         )
                     } catch (e: Exception) {
-                        toast("Link nahi khula, Boss")
+                        toast("The link did not open, Boss")
                     }
                 }
             }
@@ -195,7 +195,7 @@ class TrampolineActivity : Activity() {
                             ).setFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                         )
                     } catch (e: Exception) {
-                        toast("WhatsApp chat nahi khula, Boss")
+                        toast("The WhatsApp chat did not open, Boss")
                     }
                 } else {
                     // Number nahi mila — sirf WhatsApp khol do
@@ -232,7 +232,7 @@ class TrampolineActivity : Activity() {
                 if (wf != null && step != null) {
                     NotifyFactory.postStep(this, wf, step)
                 } else {
-                    toast("Agla step nahi mila, Boss")
+                    toast("The next step was not found, Boss")
                 }
             }
 
@@ -248,7 +248,7 @@ class TrampolineActivity : Activity() {
 
             else -> {
                 if (notifId > 0) NotifyFactory.cancel(this, notifId)
-                toast("Yeh action abhi uplabdh nahi hai, Boss")
+                toast("This action is not available right now, Boss")
                 LogStore.log(this, "Unknown action: $action")
             }
         }
@@ -267,7 +267,7 @@ class TrampolineActivity : Activity() {
         val uriStr = CareSettings.stateStr(this, "state_screenshot_uri")
         val pathStr = CareSettings.stateStr(this, "state_screenshot_path")
         if (uriStr.isNullOrEmpty() && pathStr.isNullOrEmpty()) {
-            toast("Screenshot ka record nahi mila, Boss")
+            toast("No record of the screenshot was found, Boss")
             return
         }
         // Legacy keys bhi taaza rakho — delete_now (turant wala
@@ -281,14 +281,14 @@ class TrampolineActivity : Activity() {
         }
         val label = when (after) {
             "5m" -> "5 minutes"
-            "1d" -> "1 din"
-            else -> "1 ghanta"
+            "1d" -> "1 day"
+            else -> "1 hour"
         }
         DeleteReceiver.addPending(
             this, pathStr ?: "", uriStr ?: "",
             System.currentTimeMillis() + delayMs, label
         )
-        toast("Theek hai Boss — screenshot $label me delete hoga")
+        toast("OK Boss — the screenshot will be deleted in $label")
         LogStore.log(this, "Screenshot delete scheduled: $after")
     }
 
@@ -313,7 +313,7 @@ class TrampolineActivity : Activity() {
                 if (ok) {
                     CareSettings.setStateStr(this, DeleteReceiver.KEY_DELETE_URI, "")
                     CareSettings.setStateStr(this, DeleteReceiver.KEY_DELETE_PATH, "")
-                    toast("Screenshot delete ho gaya 🧹")
+                    toast("Screenshot deleted 🧹")
                     LogStore.log(this, "Screenshot delete_now SUCCESS (file path)")
                     return
                 }
@@ -335,7 +335,7 @@ class TrampolineActivity : Activity() {
                 null
             }
         if (uriStr.isNullOrEmpty()) {
-            toast("Delete karne ke liye screenshot nahi mila")
+            toast("No screenshot was found to delete")
             LogStore.log(this, "delete_now FAIL: na path chala, na URI mila")
             return
         }
@@ -347,7 +347,7 @@ class TrampolineActivity : Activity() {
             if (rows > 0) {
                 CareSettings.setStateStr(this, DeleteReceiver.KEY_DELETE_URI, "")
                 CareSettings.setStateStr(this, DeleteReceiver.KEY_DELETE_PATH, "")
-                toast("Screenshot delete ho gaya 🧹")
+                toast("Screenshot deleted 🧹")
                 LogStore.log(this, "Screenshot delete_now SUCCESS")
                 return
             }
@@ -365,7 +365,7 @@ class TrampolineActivity : Activity() {
                 this,
                 "delete_now stage 2/3 FAIL: ${e.javaClass.simpleName}: ${e.message}"
             )
-            toast("Delete nahi hua, Boss")
+            toast("The delete did not happen, Boss")
             return
         }
         // Stage 3/3: Android 11+ ka aadhikarik confirmation raasta.
@@ -379,7 +379,7 @@ class TrampolineActivity : Activity() {
                 LogStore.log(
                     this,
                     "delete_now stage 3/3: consent pehle se khula hai — " +
-                        "dobara launch nahi kiya"
+                        "not launched again"
                 )
                 return
             }
@@ -398,7 +398,7 @@ class TrampolineActivity : Activity() {
                 )
             } catch (e: Exception) {
                 waitingForDeleteConfirm = false
-                toast("Confirmation nahi khula — Gallery se delete kar dijiye")
+                toast("The confirmation did not open — please delete it from the Gallery")
                 LogStore.log(
                     this,
                     "delete_now consent launch FAIL: " +
@@ -406,7 +406,7 @@ class TrampolineActivity : Activity() {
                 )
             }
         } else {
-            toast("Is Android par My Care seedha delete nahi kar sakta — Gallery se kar dijiye")
+            toast("On this Android, My Care cannot delete directly — please delete it from the Gallery")
         }
     }
 
@@ -421,7 +421,7 @@ class TrampolineActivity : Activity() {
                 Log.w(TAG, "lockNow fail: ${e.message}")
             }
         }
-        toast("Lock ke liye Device Admin chahiye — Setup Wizard khol raha hun")
+        toast("Lock needs Device Admin — opening the Setup Wizard")
         startActivity(
             Intent(this, SetupWizardActivity::class.java)
                 .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -462,7 +462,7 @@ class TrampolineActivity : Activity() {
                 if (tryStart(launch)) return
             }
         }
-        toast("Woh app is phone me nahi mila, Boss")
+        toast("That app was not found on this phone, Boss")
     }
 
     private fun tryStart(intent: Intent): Boolean {
@@ -492,23 +492,23 @@ class TrampolineActivity : Activity() {
                 .setPackage(slotPkg)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             if (tryStart(alarms)) {
-                LogStore.log(this, "Clock khola: $slotPkg (SHOW_ALARMS, chuna hua app)")
+                LogStore.log(this, "Clock opened: $slotPkg (SHOW_ALARMS, chosen app)")
                 return
             }
             val launch = packageManager.getLaunchIntentForPackage(slotPkg)
             if (launch != null) {
                 launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 if (tryStart(launch)) {
-                    LogStore.log(this, "Clock khola: $slotPkg (launcher, chuna hua app)")
+                    LogStore.log(this, "Clock opened: $slotPkg (launcher, chosen app)")
                     return
                 }
             }
-            LogStore.log(this, "Clock: chuna hua app ($slotPkg) nahi khula — auto khoj")
+            LogStore.log(this, "Clock: the chosen app ($slotPkg) did not open — auto search")
         }
         val generic = Intent(AlarmClock.ACTION_SHOW_ALARMS)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         if (tryStart(generic)) {
-            LogStore.log(this, "Clock khola: auto (SHOW_ALARMS)")
+            LogStore.log(this, "Clock opened: auto (SHOW_ALARMS)")
             return
         }
         val candidates = listOf(
@@ -519,7 +519,7 @@ class TrampolineActivity : Activity() {
             val launch = packageManager.getLaunchIntentForPackage(pkg) ?: continue
             launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             if (tryStart(launch)) {
-                LogStore.log(this, "Clock khola: $pkg (package khoj se)")
+                LogStore.log(this, "Clock opened: $pkg (package search)")
                 return
             }
         }
@@ -541,7 +541,7 @@ class TrampolineActivity : Activity() {
                         ?: continue
                     launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     if (tryStart(launch)) {
-                        LogStore.log(this, "Clock khola: $pkg (launcher khoj se)")
+                        LogStore.log(this, "Clock opened: $pkg (launcher search)")
                         return
                     }
                 }
@@ -549,8 +549,8 @@ class TrampolineActivity : Activity() {
         } catch (e: Exception) {
             // khoj fail — neeche ka sandesh hi kaafi hai
         }
-        toast("Clock app nahi mila, Boss — Settings me apna Clock app chun dijiye")
-        LogStore.log(this, "Clock open FAIL: koi clock app nahi mila")
+        toast("No Clock app found, Boss — choose your Clock app in Settings")
+        LogStore.log(this, "Clock open FAILED: no clock app found")
     }
 
     /**
@@ -565,7 +565,7 @@ class TrampolineActivity : Activity() {
         try {
             val am = getSystemService(AudioManager::class.java)
             if (am == null) {
-                toast("Volume service nahi mili, Boss")
+                toast("The volume service was not found, Boss")
                 LogStore.log(this, "set_volume FAIL: AudioManager null")
                 return
             }
@@ -574,7 +574,7 @@ class TrampolineActivity : Activity() {
             am.setStreamVolume(AudioManager.STREAM_MUSIC, index, 0)
             LogStore.log(this, "Volume set: $percent% (index $index/$max)")
         } catch (e: Exception) {
-            toast("Volume set nahi ho paya, Boss")
+            toast("The volume could not be set, Boss")
             LogStore.log(this, "set_volume FAIL: ${e.message}")
         }
     }
@@ -590,12 +590,12 @@ class TrampolineActivity : Activity() {
         if (!Settings.System.canWrite(this)) {
             NotifyFactory.postPlain(
                 this, NotifyFactory.notifIdFor("brightness_permission") + 7,
-                "Brightness ke liye permission chahiye ⚠️",
-                "Boss, brightness badalne ki system permission abhi mili " +
-                    "nahi hai. My Care -> Setup Wizard -> 'System Settings " +
-                    "(Brightness)' se de dijiye — phir yeh button kaam karega."
+                "Brightness needs a permission ⚠️",
+                "Boss, the system permission to change brightness is not granted " +
+                    "yet. My Care -> Setup Wizard -> 'System Settings " +
+                    "(Brightness)' step and grant it — then this button will work."
             )
-            LogStore.log(this, "set_brightness SKIP: WRITE_SETTINGS grant nahi hai")
+            LogStore.log(this, "set_brightness SKIPPED: WRITE_SETTINGS grant missing")
             return
         }
         try {
@@ -611,7 +611,7 @@ class TrampolineActivity : Activity() {
             )
             LogStore.log(this, "Brightness set: $percent% (value $value/255)")
         } catch (e: Exception) {
-            toast("Brightness set nahi ho payi, Boss")
+            toast("The brightness could not be set, Boss")
             LogStore.log(this, "set_brightness FAIL: ${e.message}")
         }
     }

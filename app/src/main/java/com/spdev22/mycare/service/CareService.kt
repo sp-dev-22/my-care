@@ -1,5 +1,6 @@
 package com.spdev22.mycare.service
 
+import android.Manifest
 import android.app.AlarmManager
 import android.app.Notification
 import android.app.NotificationChannel
@@ -11,7 +12,11 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ApplicationInfo
+import android.content.pm.PackageManager
+import android.content.pm.ServiceInfo
 import android.database.ContentObserver
+import android.graphics.SurfaceTexture
+import android.hardware.Camera
 import android.net.Uri
 import android.os.BatteryManager
 import android.os.Build
@@ -22,6 +27,8 @@ import android.os.IBinder
 import android.provider.ContactsContract
 import android.util.Log
 import com.spdev22.mycare.data.CareSettings
+import com.spdev22.mycare.data.GroupStore
+import com.spdev22.mycare.data.IntruderCaptures
 import com.spdev22.mycare.data.LogStore
 import com.spdev22.mycare.data.UserWorkflowStore
 import com.spdev22.mycare.data.WorkflowOverrides
@@ -92,7 +99,22 @@ class CareService : Service() {
         super.onCreate()
         createChannelIfNeeded()
         NotifyFactory.ensureChannel(this)
-        startForeground(NOTIF_ID, buildNotification())
+        // 0.2.8: on API 34+ start with the specialUse type ONLY —
+        // the camera type is declared in the manifest for capture,
+        // but claiming it at start time would make background
+        // starts (boot) fail on Android 14. Capture failures are
+        // caught and logged; the service itself must never fall
+        // over because of the camera.
+        if (Build.VERSION.SDK_INT >= 34) {
+            startForeground(
+                NOTIF_ID, buildNotification(),
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+            )
+        } else {
+            startForeground(NOTIF_ID, buildNotification())
+        }
+        instance = this
+        isRunning = true
 
         tracker = UsageTracker(this)
         pack = WorkflowEngine.loadPack(this)
@@ -104,8 +126,8 @@ class CareService : Service() {
         handler = Handler(thread!!.looper)
         registerObservers()
         handler?.post(pollRunnable)
-        Log.i(TAG, "Care engine chalu — ${pack.size} workflows load hue")
-        LogStore.log(this, "Care Service chalu — ${pack.size} workflows live")
+        Log.i(TAG, "Care engine started — ${pack.size} workflows loaded")
+        LogStore.log(this, "Care Service started — ${pack.size} workflows live")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -115,6 +137,8 @@ class CareService : Service() {
     }
 
     override fun onDestroy() {
+        if (instance === this) instance = null
+        isRunning = false
         handler?.removeCallbacks(pollRunnable)
         contactObserver?.let {
             try {
@@ -147,7 +171,7 @@ class CareService : Service() {
         if (wfVersionSeen >= 0 && wfVersion != wfVersionSeen) {
             pack = WorkflowEngine.loadPack(this)
             DailyScheduler.scheduleAll(this)
-            LogStore.log(this, "Workflows taaza hue — kul ${pack.size} (pack + user ke banaye)")
+            LogStore.log(this, "Workflows refreshed — total ${pack.size} (pack + your own)")
         }
         wfVersionSeen = wfVersion
 
@@ -175,6 +199,7 @@ class CareService : Service() {
             when (wf.triggerType) {
                 "app_hopping" -> if (usageOk) evalBoredom(wf, t, now)
                 "single_app_over" -> if (usageOk) evalLongApp(wf, t, now)
+                "app_group_used" -> if (usageOk) evalGroupUsed(wf, t, now)
                 "continuous_use_over" -> if (usageOk) evalRest(wf, t, now)
                 "interval" -> evalInterval(wf, now)
                 "battery_level" -> evalBattery(wf, batt, now)
@@ -227,6 +252,42 @@ class CareService : Service() {
         )
         CareSettings.setLongAppFiredKey(this, key)
         Log.i(TAG, "Long-App Suggestion fire: $pkg (${elapsedMin}m)")
+    }
+
+    /**
+     * 0.2.8: app_group_used — fires once per session when an app
+     * from the named App Group is used (optionally only after
+     * `minutes` of use; default 0 = as soon as the session starts).
+     * This is what powers the Music Volume Guard default workflow:
+     * it simply never fires until a group with that name exists
+     * and has apps in it.
+     * Variables: {app}, {minutes}.
+     */
+    private fun evalGroupUsed(wf: Workflow, t: UsageTracker, now: Long) {
+        val groupName = wf.triggerParams["group"]?.trim() ?: return
+        if (groupName.isEmpty()) return
+        val pkg = t.currentPkg ?: return
+        if (t.isSystemOrLauncher(pkg)) return
+        val group = GroupStore.loadGroups(this)
+            .firstOrNull { it.name.equals(groupName, ignoreCase = true) }
+            ?: return
+        if (pkg !in group.packages) return
+        val minutes = wf.triggerParams["minutes"]?.toIntOrNull()
+            ?: wf.settings["minutes"]?.toIntOrNull() ?: 0
+        val sessionMs = t.currentSessionMs(now)
+        if (sessionMs < minutes * 60_000L) return
+        val key = pkg + "@" + t.currentStart
+        val stateKey = "state_group_fired_${wf.id}"
+        if (CareSettings.stateStr(this, stateKey) == key) return
+        CareSettings.setStateStr(this, stateKey, key)
+        NotifyFactory.postWorkflow(
+            this, wf,
+            mapOf(
+                "app" to HisaabBuilder.appLabel(this, pkg),
+                "minutes" to (sessionMs / 60_000L).toInt().toString()
+            )
+        )
+        Log.i(TAG, "Group trigger fire [${wf.id}]: $pkg in group '$groupName'")
     }
 
     private fun evalRest(wf: Workflow, t: UsageTracker, now: Long) {
@@ -363,11 +424,11 @@ class CareService : Service() {
             val afterMin = wf.settings["after_minutes"]?.toLongOrNull() ?: 1L
             val intent = Intent(this, AlarmNotifyReceiver::class.java).apply {
                 action = "com.spdev22.mycare.FULL_CHARGE_ALARM"
-                putExtra(AlarmNotifyReceiver.EXTRA_TITLE, "⚠️ Phone Full Charged!")
+                putExtra(AlarmNotifyReceiver.EXTRA_TITLE, "⚠️ Phone Fully Charged!")
                 putExtra(
                     AlarmNotifyReceiver.EXTRA_TEXT,
-                    "Battery full ho gayi hai, Boss — charger hata dijiye, " +
-                        "battery ki sehat bani rahegi."
+                    "Battery is fully charged, Boss — unplug the charger " +
+                        "to keep the battery healthy."
                 )
                 putExtra(AlarmNotifyReceiver.EXTRA_ID, 9901)
             }
@@ -380,7 +441,7 @@ class CareService : Service() {
                 AlarmManager.RTC_WAKEUP,
                 System.currentTimeMillis() + afterMin * 60_000L, pi
             )
-            LogStore.log(this, "Battery Full alarm set: $afterMin min baad")
+            LogStore.log(this, "Battery Full alarm set: fires in $afterMin min")
         } catch (e: Exception) {
             Log.w(TAG, "Full charge alarm fail: ${e.message}")
         }
@@ -422,9 +483,9 @@ class CareService : Service() {
                     NotifyFactory.postPopupLauncher(
                         this,
                         NotifyFactory.notifIdFor(wf.id),
-                        "Naya app install hua 📲",
-                        "'$label' install ho gaya hai. Use kis group me rakhein, Boss? " +
-                            "Is notification par tap karke group chunein.",
+                        "New app installed 📲",
+                        "'$label' was just installed. Which group should it " +
+                            "belong to, Boss? Tap this notification to choose.",
                         pkg, label, wf.id
                     )
                     // Ek cycle me ek hi suchna — baaki baseline me chale gaye
@@ -502,7 +563,7 @@ class CareService : Service() {
             )?.use { cursor ->
                 if (!cursor.moveToFirst()) return
                 val id = cursor.getLong(0)
-                val name = cursor.getString(1) ?: "Naya contact"
+                val name = cursor.getString(1) ?: "New contact"
                 val last = CareSettings.stateLong(this, "state_last_contact_id")
                 if (id <= last) return
                 CareSettings.setStateLong(this, "state_last_contact_id", id)
@@ -530,7 +591,7 @@ class CareService : Service() {
                     wf.copy(
                         buttons = listOf(
                             WfButton(
-                                "WhatsApp par kholo", "open_whatsapp_chat",
+                                "Open on WhatsApp", "open_whatsapp_chat",
                                 mapOf("number" to waNumber)
                             ),
                             WfButton("Skip", "skip")
@@ -542,7 +603,7 @@ class CareService : Service() {
                 NotifyFactory.postWorkflow(
                     this, runtime, mapOf("name" to name)
                 )
-                LogStore.log(this, "Naya contact fire: $name")
+                LogStore.log(this, "New contact fired: $name")
             }
         } catch (e: Exception) {
             Log.w(TAG, "Contact check fail: ${e.message}")
@@ -593,20 +654,23 @@ class CareService : Service() {
                 lastShotPermLogMs = now
                 LogStore.log(
                     this,
-                    "Screenshot folder-watch: folders padh nahi paya — " +
-                        "Photos/Media permission check karein (Setup Wizard)"
+                    "Screenshot folder-watch: could not read the folders — " +
+                        "check the Photos/Media permission (Setup Wizard)"
                 )
             }
             return
         }
+        // 0.2.8: Running Services page ke liye taaza scan ki mohar
+        CareSettings.setStateLong(this, "state_shot_last_scan", now)
+        CareSettings.setStateLong(this, "state_shot_tracked", files.size.toLong())
 
         val seenRaw = CareSettings.stateStr(this, KEY_SHOT_SEEN)
         if (seenRaw == null) {
             saveShotSeen(files)
             LogStore.log(
                 this,
-                "Screenshot folder-watch baseline: ${files.size} purani " +
-                    "files dekhi hui maani gayin (fire nahi hongi)"
+                "Screenshot folder-watch baseline: ${files.size} existing " +
+                    "files marked as seen (they will not fire)"
             )
             return
         }
@@ -622,10 +686,10 @@ class CareService : Service() {
         val folderName = newest.parentFile?.name ?: ""
         LogStore.log(
             this,
-            "Screenshot detect (folder watch): $folderName/${newest.name}"
+            "Screenshot detected (folder watch): $folderName/${newest.name}"
         )
         if (!WorkflowPrefs.isEnabled(this, packWf)) {
-            LogStore.log(this, "Screenshot mila par Screenshot Safai OFF hai — fire nahi")
+            LogStore.log(this, "Screenshot found but Screenshot Cleanup is OFF — not fired")
             return
         }
         val wf = WorkflowOverrides.effective(this, packWf)
@@ -660,6 +724,156 @@ class CareService : Service() {
             "${it.absolutePath}|${it.lastModified()}"
         }
         CareSettings.setStateStr(this, KEY_SHOT_SEEN, raw)
+    }
+
+    // ---------------- 0.2.8: intruder front-camera capture ----------------
+    //
+    // The DeviceAdmin receiver asks (via the companion) and the
+    // capture runs HERE, on the persistent foreground service's own
+    // thread: a foreground-service process is allowed camera access
+    // in ways a background receiver is not. Camera1 API on purpose —
+    // light, and fine for one still photo on a Go phone.
+    //
+    // Honest limits, all handled: no front camera, CAMERA permission
+    // missing, OEM/security blocks, or the service not running ->
+    // the text alert (already posted by the receiver) still stands
+    // and the exact reason lands in the Logs. Nothing here may
+    // crash: every step is guarded.
+
+    private fun captureIntruderPhoto() {
+        val ctx: Context = this
+        if (checkSelfPermission(Manifest.permission.CAMERA) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            LogStore.log(
+                ctx,
+                "Intruder capture SKIPPED — Camera permission not granted " +
+                    "(Setup Wizard, step 'Camera')"
+            )
+            return
+        }
+        var camera: Camera? = null
+        try {
+            // Find the front camera
+            var frontId = -1
+            var frontInfo: Camera.CameraInfo? = null
+            val info = Camera.CameraInfo()
+            for (i in 0 until Camera.getNumberOfCameras()) {
+                Camera.getCameraInfo(i, info)
+                if (info.facing == Camera.CameraInfo.CAMERA_FACING_FRONT) {
+                    frontId = i
+                    frontInfo = info
+                    break
+                }
+            }
+            if (frontId < 0 || frontInfo == null) {
+                LogStore.log(ctx, "Intruder capture SKIPPED — no front camera on this phone")
+                return
+            }
+            camera = Camera.open(frontId)
+            val cam = camera ?: run {
+                LogStore.log(ctx, "Intruder capture FAILED — camera open returned null")
+                return
+            }
+            // A modest picture size — enough to recognise a face,
+            // small enough for a 2 GB Go phone.
+            try {
+                val params = cam.parameters
+                val size = params.supportedPictureSizes
+                    ?.filter { it.width <= 1280 }
+                    ?.maxByOrNull { it.width * it.height }
+                    ?: params.supportedPictureSizes?.firstOrNull()
+                if (size != null) params.setPictureSize(size.width, size.height)
+                // The sensor's own orientation is the safest EXIF
+                // rotation for front cameras across OEMs.
+                params.setRotation(frontInfo.orientation % 360)
+                cam.parameters = params
+            } catch (e: Exception) {
+                // parameter tweaks are best-effort only
+            }
+            // Camera needs a preview surface even for a silent
+            // capture; a dummy SurfaceTexture is the standard trick.
+            cam.setPreviewTexture(SurfaceTexture(11))
+            cam.startPreview()
+            val camRef = cam
+            val h = handler
+            if (h == null) {
+                LogStore.log(ctx, "Intruder capture FAILED — service thread not ready")
+                releaseCamera(camRef)
+                camera = null
+                return
+            }
+            // Give auto-exposure a moment, then shoot. The callback
+            // arrives on this service thread's looper.
+            h.postDelayed({
+                try {
+                    camRef.takePicture(
+                        null, null,
+                        Camera.PictureCallback { data, _ ->
+                            try {
+                                if (data != null && data.isNotEmpty()) {
+                                    val file = IntruderCaptures.saveJpeg(ctx, data)
+                                    if (file != null) {
+                                        CareSettings.setStateLong(
+                                            ctx, "state_last_capture", file.lastModified()
+                                        )
+                                        LogStore.log(
+                                            ctx,
+                                            "Intruder photo captured: ${file.name} " +
+                                                "(${data.size / 1024} KB)"
+                                        )
+                                        val wf = WorkflowEngine.loadPack(ctx)
+                                            .firstOrNull { it.triggerType == "failed_unlock" }
+                                        if (wf != null) {
+                                            NotifyFactory.postIntruderPhoto(ctx, wf, file)
+                                        }
+                                    } else {
+                                        LogStore.log(ctx, "Intruder capture FAILED — photo could not be saved")
+                                    }
+                                } else {
+                                    LogStore.log(ctx, "Intruder capture FAILED — camera returned no image data")
+                                }
+                            } catch (e: Exception) {
+                                LogStore.log(
+                                    ctx,
+                                    "Intruder capture FAILED while saving: " +
+                                        "${e.javaClass.simpleName}: ${e.message}"
+                                )
+                            } finally {
+                                releaseCamera(camRef)
+                            }
+                        }
+                    )
+                } catch (e: Exception) {
+                    LogStore.log(
+                        ctx,
+                        "Intruder capture FAILED at takePicture: " +
+                            "${e.javaClass.simpleName}: ${e.message}"
+                    )
+                    releaseCamera(camRef)
+                }
+            }, 400)
+            camera = null // ownership moved to the delayed capture
+        } catch (e: Exception) {
+            LogStore.log(
+                ctx,
+                "Intruder capture FAILED: ${e.javaClass.simpleName}: ${e.message}"
+            )
+            camera?.let { releaseCamera(it) }
+        }
+    }
+
+    private fun releaseCamera(cam: Camera) {
+        try {
+            cam.stopPreview()
+        } catch (e: Exception) {
+            // already stopped — fine
+        }
+        try {
+            cam.release()
+        } catch (e: Exception) {
+            // ignore
+        }
     }
 
     // ---------------- first unlock (Welcome Boss) ----------------
@@ -701,7 +915,7 @@ class CareService : Service() {
                 "My Care Service",
                 NotificationManager.IMPORTANCE_LOW
             )
-            channel.description = "Care service chalu hai — iske bina triggers nahi chalenge"
+            channel.description = "Care service is running — triggers need it alive"
             manager?.createNotificationChannel(channel)
         }
     }
@@ -714,8 +928,8 @@ class CareService : Service() {
             Notification.Builder(this)
         }
         return builder
-            .setContentTitle("My Care active hai")
-            .setContentText("Care workflows chalu hain — My Care nazar rakh raha hai.")
+            .setContentTitle("My Care is active")
+            .setContentText("Care workflows are running — My Care is watching over your phone.")
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setOngoing(true)
             .build()
@@ -726,6 +940,49 @@ class CareService : Service() {
         private const val CHANNEL_ID = "care_service"
         private const val NOTIF_ID = 1001
         private const val POLL_INTERVAL_MS = 20_000L
+
+        /** 0.2.8: live instance + running flag (Running Services page). */
+        @Volatile
+        private var instance: CareService? = null
+
+        @Volatile
+        var isRunning: Boolean = false
+            private set
+
+        /**
+         * 0.2.8: the DeviceAdmin receiver calls this when the
+         * failed-unlock threshold is reached. The capture itself
+         * runs on the service thread. @return false (with the reason
+         * logged) when the service is not running — the text alert
+         * has already been posted by the receiver either way.
+         */
+        fun requestIntruderCapture(context: Context): Boolean {
+            val svc = instance
+            if (svc == null || !isRunning) {
+                LogStore.log(
+                    context,
+                    "Intruder capture SKIPPED — Care Service is not running " +
+                        "(photo needs the live foreground service)"
+                )
+                return false
+            }
+            val h = svc.handler
+            if (h == null) {
+                LogStore.log(context, "Intruder capture SKIPPED — service thread not ready")
+                return false
+            }
+            h.post {
+                try {
+                    svc.captureIntruderPhoto()
+                } catch (e: Exception) {
+                    LogStore.log(
+                        context,
+                        "Intruder capture FAILED: ${e.javaClass.simpleName}: ${e.message}"
+                    )
+                }
+            }
+            return true
+        }
 
         /** Folder-watch wale screenshot folders (shared storage ke andar). */
         private val SHOT_DIRS = listOf(

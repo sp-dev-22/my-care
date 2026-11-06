@@ -74,7 +74,7 @@ class PopupActivity : Activity() {
                         NotifyFactory.buttonIntent(this, wf.id, notifId, btn, index)
                     )
                 } catch (e: Exception) {
-                    toast("Action nahi ho paya, Boss")
+                    toast("The action could not be done, Boss")
                 }
                 finish()
             }
@@ -86,19 +86,19 @@ class PopupActivity : Activity() {
     private fun buildAssignGroup(root: LinearLayout) {
         val pkg = intent.getStringExtra(EXTRA_PKG) ?: ""
         val label = intent.getStringExtra(EXTRA_LABEL) ?: pkg
-        root.addView(UiKit.title(this, "Naya app install hua"))
+        root.addView(UiKit.title(this, "New app installed"))
         root.addView(
             UiKit.subtitle(
                 this,
-                "'$label' ko kis group me rakhein, Boss? " +
-                    "Group me rakhne se uske hisaab aur suggestions sahi rahenge."
+                "Which group should '$label' go into, Boss? " +
+                    "Grouping it keeps its account and suggestions right."
             )
         )
 
         val groups = GroupStore.loadGroups(this)
         if (groups.isEmpty()) {
-            root.addView(UiKit.body(this, "Abhi koi group nahi bana hai. Pehle My Care kholkar " +
-                "ek group bana dijiye — phir yeh app wahan jod sakte hain."))
+            root.addView(UiKit.body(this, "No group exists yet. Open My Care and " +
+                "create a group first — then this app can be added to it."))
             root.addView(UiKit.gap(this, 6))
         }
         for (g in groups) {
@@ -106,18 +106,18 @@ class PopupActivity : Activity() {
             b.setOnClickListener {
                 val added = GroupStore.addPackageToGroup(this, g.name, pkg)
                 toast(
-                    if (added) "'$label' -> '${g.name}' group me jud gaya"
-                    else "'$label' pehle se is group me hai"
+                    if (added) "'$label' was added to the '${g.name}' group"
+                    else "'$label' is already in this group"
                 )
-                LogStore.log(this, "Naya app $pkg -> group '${g.name}'")
+                LogStore.log(this, "New app $pkg -> group '${g.name}'")
                 finish()
             }
             root.addView(b)
         }
-        addCloseButton(root, "Skip — baad me karenge")
+        addCloseButton(root, "Skip — will do it later")
     }
 
-    private fun addCloseButton(root: LinearLayout, text: String = "Band karo") {
+    private fun addCloseButton(root: LinearLayout, text: String = "Close") {
         val b = UiKit.secondaryButton(this, text)
         b.setOnClickListener { finish() }
         root.addView(b)

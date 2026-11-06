@@ -113,8 +113,8 @@ class DeleteReceiver : BroadcastReceiver() {
             val secs = (dueAt - System.currentTimeMillis()) / 1000
             LogStore.log(
                 context,
-                "Screenshot delete pending darj: '$label' — due " +
-                    "${fmtTime(dueAt)} (~${secs}s baad), kul pending ${list.size}"
+                "Screenshot delete pending recorded: '$label' — due " +
+                    "${fmtTime(dueAt)} (~${secs}s from now), total pending ${list.size}"
             )
             schedulePendingAlarm(context)
         }
@@ -176,9 +176,9 @@ class DeleteReceiver : BroadcastReceiver() {
                 val lateSec = (now - entry.due) / 1000
                 LogStore.log(
                     context,
-                    "Screenshot pending delete chal raha hai (via $source): " +
-                        "due ${fmtTime(entry.due)}, ab ${fmtTime(now)}, " +
-                        "der ${lateSec}s — ${File(entry.path).name}"
+                    "Screenshot pending delete executing (via $source): " +
+                        "due ${fmtTime(entry.due)}, now ${fmtTime(now)}, " +
+                        "late by ${lateSec}s — ${File(entry.path).name}"
                 )
                 attemptDelete(
                     context,
@@ -230,7 +230,7 @@ class DeleteReceiver : BroadcastReceiver() {
                     )
                     LogStore.log(
                         context,
-                        "Screenshot delete alarm EXACT set: ${fmtTime(earliest.due)}"
+                        "Screenshot delete alarm set EXACT: ${fmtTime(earliest.due)}"
                     )
                 } else {
                     am.setAndAllowWhileIdle(
@@ -238,16 +238,16 @@ class DeleteReceiver : BroadcastReceiver() {
                     )
                     LogStore.log(
                         context,
-                        "Screenshot delete alarm inexact set (exact ki " +
-                            "ijaazat nahi): ${fmtTime(earliest.due)} — " +
-                            "poll fallback saath hai"
+                        "Screenshot delete alarm set inexact (exact " +
+                            "permission missing): ${fmtTime(earliest.due)} — " +
+                            "the poll fallback is active"
                     )
                 }
             } catch (e: SecurityException) {
                 LogStore.log(
                     context,
                     "Screenshot delete alarm SecurityException " +
-                        "(${e.message}) — inexact par gira, poll fallback saath hai"
+                        "(${e.message}) — fell back to inexact, poll fallback is active"
                 )
                 try {
                     am.setAndAllowWhileIdle(
@@ -256,14 +256,14 @@ class DeleteReceiver : BroadcastReceiver() {
                 } catch (e2: Exception) {
                     LogStore.log(
                         context,
-                        "Screenshot delete alarm bilkul fail: " +
+                        "Screenshot delete alarm failed completely: " +
                             "${e2.javaClass.simpleName}: ${e2.message}"
                     )
                 }
             } catch (e: Exception) {
                 LogStore.log(
                     context,
-                    "Screenshot delete alarm fail: " +
+                    "Screenshot delete alarm failed: " +
                         "${e.javaClass.simpleName}: ${e.message}"
                 )
             }
@@ -337,12 +337,12 @@ class DeleteReceiver : BroadcastReceiver() {
             if (uriStr == null) {
                 NotifyFactory.postPlain(
                     context, id,
-                    "Screenshot delete nahi hua 😔",
-                    "File tak pahunch nahi bani, Boss. Gallery se khud delete kar dijiye."
+                    "Screenshot could not be deleted 😔",
+                    "The file could not be reached, Boss. Please delete it from the Gallery yourself."
                 )
                 LogStore.log(
                     context,
-                    "Screenshot delete [$source] FAIL: na path chala, na URI mila"
+                    "Screenshot delete [$source] FAILED: neither the path nor a URI worked"
                 )
                 return DeleteOutcome.FAILED
             }
@@ -353,7 +353,7 @@ class DeleteReceiver : BroadcastReceiver() {
             } catch (e: Exception) {
                 LogStore.log(
                     context,
-                    "Screenshot delete [$source] FAIL: kharab URI (${e.message})"
+                    "Screenshot delete [$source] FAILED: bad URI (${e.message})"
                 )
                 return DeleteOutcome.FAILED
             }
@@ -381,12 +381,12 @@ class DeleteReceiver : BroadcastReceiver() {
             } catch (e: Exception) {
                 NotifyFactory.postPlain(
                     context, id,
-                    "Screenshot delete nahi hua 😔",
-                    "Kuch gadbad ho gayi, Boss. Gallery se khud delete kar dijiye."
+                    "Screenshot could not be deleted 😔",
+                    "Something went wrong, Boss. Please delete it from the Gallery yourself."
                 )
                 LogStore.log(
                     context,
-                    "Screenshot delete [$source] FAIL: " +
+                    "Screenshot delete [$source] FAILED: " +
                         "${e.javaClass.simpleName}: ${e.message}"
                 )
                 return DeleteOutcome.FAILED
@@ -400,7 +400,7 @@ class DeleteReceiver : BroadcastReceiver() {
             postConfirm(context, id)
             LogStore.log(
                 context,
-                "Screenshot delete [$source] stage 3/3: consent notification bheja"
+                "Screenshot delete [$source] stage 3/3: consent notification posted"
             )
             return DeleteOutcome.CONFIRM_POSTED
         }
@@ -408,8 +408,8 @@ class DeleteReceiver : BroadcastReceiver() {
         private fun onDeleted(context: Context, id: Int, logLine: String) {
             NotifyFactory.postPlain(
                 context, id,
-                "Screenshot delete ho gaya 🧹",
-                "Jaisa aapne chuna tha, screenshot auto-delete ho gaya, Boss."
+                "Screenshot deleted 🧹",
+                "As you chose, the screenshot was auto-deleted, Boss."
             )
             LogStore.log(context, logLine)
         }
@@ -423,10 +423,10 @@ class DeleteReceiver : BroadcastReceiver() {
             // Trampoline ka delete_now action system confirmation kholega
             NotifyFactory.postActionPlain(
                 context, id,
-                "Screenshot delete confirm karein",
-                "Android ko delete se pehle aapki haan chahiye. " +
-                    "Button dabate hi system ka confirmation khulega.",
-                "Delete karein", "delete_now", "screenshot_safai"
+                "Please confirm the screenshot delete",
+                "Android needs your OK before deleting. " +
+                    "Tapping the button opens the system's confirmation.",
+                "Delete it", "delete_now", "screenshot_safai"
             )
         }
 

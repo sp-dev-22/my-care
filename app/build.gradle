@@ -25,8 +25,8 @@ android {
         applicationId 'com.spdev22.mycare'
         minSdk 24
         targetSdk 34
-        versionCode 9
-        versionName '0.2.7'
+        versionCode 10
+        versionName '0.2.8'
 
         // Target device: Infinix Smart 7 HD (Android 12 Go, 32-bit)
         ndk {

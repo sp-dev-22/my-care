@@ -32,6 +32,17 @@
          hai; declare karna zaroori hai, asal ijaazat user Setup Wizard
          se "Modify system settings" wali screen par deta hai. -->
     <uses-permission android:name="android.permission.WRITE_SETTINGS" />
+    <!-- 0.2.8: Intruder Alert ka photo capture — CAMERA ek runtime
+         permission hai (Setup Wizard ka step 11); FOREGROUND_SERVICE_CAMERA
+         + service type "camera" targetSdk 34 ki shart hai taaki live
+         foreground service camera istemal kar sake. uses-feature
+         required=false: bina front camera wale phone par bhi app
+         chalega (capture wahan imaandaari se skip + log hoga). -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
+    <uses-feature
+        android:name="android.hardware.camera.front"
+        android:required="false" />
 
     <application
         android:allowBackup="false"
@@ -60,6 +71,19 @@
         <!-- 0.2.5: Gemini se workflow banwane wali screen -->
         <activity
             android:name=".ui.AiWorkflowActivity"
+            android:exported="false" />
+
+        <!-- 0.2.8: System tab hub, Running Services aur Intruder Captures -->
+        <activity
+            android:name=".ui.SystemHubActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".ui.RunningServicesActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".ui.CapturesActivity"
             android:exported="false" />
 
         <activity
@@ -106,7 +130,7 @@
         <service
             android:name=".service.CareService"
             android:exported="false"
-            android:foregroundServiceType="specialUse">
+            android:foregroundServiceType="specialUse|camera">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Caretaker notification workflows ke liye hamesha-on care service" />

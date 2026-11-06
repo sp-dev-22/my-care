@@ -28,6 +28,9 @@ object CareSettings {
     const val KEY_PAANI_HOURS = "set_paani_hours"
     const val KEY_BATTERY_LOW = "set_battery_low"
     const val KEY_CACHE_MB = "set_cache_mb"
+    // 0.2.8: how many failed unlock attempts (inside the 10-minute
+    // window) trigger the Intruder Alert + front-camera capture
+    const val KEY_INTRUDER_THRESHOLD = "set_intruder_threshold"
 
     // ---- plan wale defaults ----
     const val DEFAULT_STUDY_TIME = "08:00"
@@ -40,6 +43,7 @@ object CareSettings {
     const val DEFAULT_PAANI_HOURS = 2
     const val DEFAULT_BATTERY_LOW = 20
     const val DEFAULT_CACHE_MB = 500
+    const val DEFAULT_INTRUDER_THRESHOLD = 2
 
     private fun prefs(context: Context) =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)

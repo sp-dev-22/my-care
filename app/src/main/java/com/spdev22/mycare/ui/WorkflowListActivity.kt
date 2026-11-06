@@ -14,6 +14,7 @@ import com.spdev22.mycare.data.WorkflowPrefs
 import com.spdev22.mycare.engine.Workflow
 import com.spdev22.mycare.engine.WorkflowEngine
 import com.spdev22.mycare.notify.DailyScheduler
+import com.spdev22.mycare.setup.WorkflowPermissions
 
 /**
  * Workflows screen (0.2.2) — ready-made pack ke har workflow ka
@@ -37,24 +38,25 @@ class WorkflowListActivity : Activity() {
         super.onCreate(savedInstanceState)
 
         val root = UiKit.root(this)
-        setContentView(UiKit.scroll(this, root))
+        UiKit.tabScreen(this, root, UiKit.TAB_WORKFLOWS)
 
         root.addView(UiKit.title(this, "Workflows — On/Off"))
         root.addView(
             UiKit.subtitle(
                 this,
-                "Har workflow ko yahan se chalu/band karein, Boss. " +
-                    "Kisi workflow par TAP karke uska message, samay aur " +
-                    "limits bhi badal sakte hain (Editor-lite). " +
-                    "Jo OFF hai woh kabhi fire nahi hoga — roz wale time " +
-                    "workflows ka alarm bhi band ho jayega."
+                "Turn every workflow on or off here, Boss. TAP a " +
+                    "workflow to also change its message, time and " +
+                    "limits (Editor-lite). What is OFF will never fire — " +
+                    "a daily time workflow's alarm is cancelled too. " +
+                    "Switching something ON checks its permissions and " +
+                    "offers the missing ones right away."
             )
         )
 
         val workflows = WorkflowEngine.loadPack(this)
         if (workflows.isEmpty()) {
             val card = UiKit.card(this)
-            card.addView(UiKit.body(this, "Pack load nahi hua — koi workflow nahi mila.", 16f))
+            card.addView(UiKit.body(this, "The pack did not load — no workflows found.", 16f))
             root.addView(card)
             return
         }
@@ -65,10 +67,10 @@ class WorkflowListActivity : Activity() {
         root.addView(
             UiKit.small(
                 this,
-                "Note: Switch ki sthiti aapki apni hai — pack update " +
-                    "hone par bhi aapke On/Off waise hi rahenge. " +
-                    "✨ AI banaya = Gemini se bana aapka apna workflow; " +
-                    "use edit screen se delete bhi kar sakte hain."
+                "Note: your switch positions are yours — they stay " +
+                    "as you set them even when the pack updates. " +
+                    "✨ Made by AI = your own workflow created with " +
+                    "Gemini; you can delete it from its edit screen."
             )
         )
     }
@@ -93,7 +95,7 @@ class WorkflowListActivity : Activity() {
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         }
         val isAi = UserWorkflowStore.contains(this, wf.id)
-        texts.addView(UiKit.body(this, wf.name + if (isAi) "  ✨ AI banaya" else "", 16f).apply {
+        texts.addView(UiKit.body(this, wf.name + if (isAi) "  ✨ Made by AI" else "", 16f).apply {
             typeface = android.graphics.Typeface.DEFAULT_BOLD
         })
         val steps = if (wf.steps.isEmpty()) "" else " • ${wf.steps.size} extra steps"
@@ -119,13 +121,18 @@ class WorkflowListActivity : Activity() {
                 }
                 LogStore.log(
                     this@WorkflowListActivity,
-                    "Workflow [${wf.id}] user ne ${if (checked) "ON" else "OFF"} kiya"
+                    "Workflow [${wf.id}] switched ${if (checked) "ON" else "OFF"} by user"
                 )
                 Toast.makeText(
                     this@WorkflowListActivity,
                     "${wf.name} — ${if (checked) "ON" else "OFF"}",
                     Toast.LENGTH_SHORT
                 ).show()
+                if (checked) {
+                    // 0.2.8: permission-on-enable — if this workflow
+                    // still needs permissions, offer them right now
+                    WorkflowPermissions.promptIfMissing(this@WorkflowListActivity, wf)
+                }
             }
         }
         row.addView(toggle)

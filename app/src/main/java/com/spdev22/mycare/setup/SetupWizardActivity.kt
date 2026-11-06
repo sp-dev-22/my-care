@@ -2,17 +2,16 @@ package com.spdev22.mycare.setup
 
 import android.Manifest
 import android.app.Activity
+import android.app.NotificationManager
 import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
 import android.provider.Settings
-import android.widget.Button
-import android.widget.LinearLayout
-import android.widget.ScrollView
-import android.widget.TextView
 import android.widget.Toast
 import com.spdev22.mycare.engine.UsageTracker
 import com.spdev22.mycare.receiver.CareDeviceAdminReceiver
@@ -20,22 +19,19 @@ import com.spdev22.mycare.service.CareNotificationListener
 import com.spdev22.mycare.ui.UiKit
 
 /**
- * Setup Wizard (D11) — saari permissions ek-ek karke,
- * har ek ki WAJAH ke saath. JARVIS sp3 ke wizard wala pattern.
- *
- * Phase 1: screen aur saare raaste (intents) taiyar hain.
- * 0.2.4: Usage Access ki LIVE sthiti bhi dikhti hai — mili hai
- * ya nahi — kyunki bina iske Cache Safai jaise checks chup-chaap
- * band rehte the aur user ko wajah pata hi nahi chalti thi.
- * 0.2.6: do naye SYSTEM-LEVEL kadam — 9. WRITE_SETTINGS (brightness
- * action ke liye) aur 10. Notification Access (notification_posted
- * trigger ke liye) — dono ki bhi LIVE sthiti dikhti hai.
+ * Setup Wizard (D11) — every permission one by one, each with its
+ * REASON. 0.2.8: every step shows ✅ (granted) or ❌ (not granted)
+ * in front of its name, computed LIVE — the screen rebuilds on
+ * resume, so returning from a system settings screen updates the
+ * markers immediately. New step 11: Camera, for the Intruder
+ * Alert's photo capture.
  */
 class SetupWizardActivity : Activity() {
 
     private data class PermItem(
         val title: String,
         val why: String,
+        val granted: () -> Boolean,
         val statusText: (() -> String)? = null,
         val open: (Activity) -> Unit
     )
@@ -47,12 +43,11 @@ class SetupWizardActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
-        // Settings se permission dekar lautne par sthiti taaza dikhe
+        // Returning from a permission screen -> fresh markers/status
         buildUi()
     }
 
     private fun buildUi() {
-
         val root = UiKit.root(this)
         setContentView(UiKit.scroll(this, root))
 
@@ -60,15 +55,18 @@ class SetupWizardActivity : Activity() {
         root.addView(
             UiKit.subtitle(
                 this,
-                "Boss, My Care ko aapka khayal rakhne ke liye kuch permissions " +
-                    "chahiye hongi. Ek-ek karke dete jaiye — har ek ki wajah saath me " +
-                    "likhi hai. Bina inke aadhe workflows sirf kagaz par rahenge."
+                "Boss, My Care needs a few permissions to look after " +
+                    "you. Grant them one by one — the reason for each " +
+                    "is written with it. ✅ = granted, ❌ = not granted " +
+                    "yet. Without them, the workflows that depend on " +
+                    "them will stay on paper only."
             )
         )
 
         for (item in items()) {
             val card = UiKit.card(this)
-            card.addView(UiKit.body(this, item.title, 16f).apply {
+            val marker = if (item.granted()) "✅" else "❌"
+            card.addView(UiKit.body(this, "$marker ${item.title}", 16f).apply {
                 typeface = android.graphics.Typeface.DEFAULT_BOLD
             })
             card.addView(UiKit.small(this, item.why))
@@ -78,14 +76,14 @@ class SetupWizardActivity : Activity() {
                 })
             }
             card.addView(UiKit.gap(this, 6))
-            val btn = UiKit.primaryButton(this, "Setup karo")
+            val btn = UiKit.primaryButton(this, "Set it up")
             btn.setOnClickListener {
                 try {
                     item.open(this@SetupWizardActivity)
                 } catch (e: Exception) {
                     Toast.makeText(
                         this@SetupWizardActivity,
-                        "Yeh setting is phone par nahi khuli — Settings se manually de dijiye",
+                        "This setting did not open on this phone — please grant it manually from Settings",
                         Toast.LENGTH_LONG
                     ).show()
                 }
@@ -94,23 +92,26 @@ class SetupWizardActivity : Activity() {
             root.addView(card)
         }
 
-        root.addView(UiKit.small(this, "Note: Koi bhi permission zabardasti nahi hai. Jo nahi denge, " +
-            "us se jude workflows band rahenge — baaki app chalta rahega."))
+        root.addView(UiKit.small(this, "Note: no permission is forced. Whatever you " +
+            "don't grant, its workflows stay off — the rest of the app keeps working."))
     }
+
+    private fun runtimeGranted(perm: String): Boolean =
+        checkSelfPermission(perm) == PackageManager.PERMISSION_GRANTED
 
     private fun items(): List<PermItem> = listOf(
         PermItem(
             "1. Usage Access",
-            "Kaun sa app kitni der chala — App Groups, boredom detection aur " +
-                "30-minute wale triggers ki jaan yahi permission hai.",
+            "Which app ran for how long — this permission is the life " +
+                "of App Groups, boredom detection and the usage triggers.",
+            granted = { UsageTracker.hasUsageAccess(this@SetupWizardActivity) },
             statusText = {
                 if (UsageTracker.hasUsageAccess(this@SetupWizardActivity)) {
-                    "Sthiti: MILI HAI ✓ — Cache Safai, Unused Apps aur usage " +
-                        "wale saare checks chal sakte hain."
+                    "Status: GRANTED ✅ — Cache Cleanup, Unused Apps and all usage checks can run."
                 } else {
-                    "Sthiti: NAHI MILI ✗ — bina iske Cache Safai, Unused Apps " +
-                        "aur usage wale triggers BAND rahenge. Neeche wala " +
-                        "button dabakar My Care ko Usage Access de dein."
+                    "Status: NOT GRANTED ❌ — without it, Cache Cleanup, Unused Apps " +
+                        "and the usage triggers will stay OFF. Tap the button below " +
+                        "and give My Care Usage Access."
                 }
             }
         ) { a ->
@@ -118,8 +119,16 @@ class SetupWizardActivity : Activity() {
         },
         PermItem(
             "2. Notifications",
-            "Saare care suggestions notification se hi aayenge — yeh band to " +
-                "My Care goonga ho jayega."
+            "Every care suggestion arrives as a notification — if this " +
+                "is off, My Care goes silent.",
+            granted = {
+                if (Build.VERSION.SDK_INT >= 33) {
+                    runtimeGranted(Manifest.permission.POST_NOTIFICATIONS)
+                } else {
+                    val nm = getSystemService(NotificationManager::class.java)
+                    nm?.areNotificationsEnabled() ?: false
+                }
+            }
         ) { a ->
             if (Build.VERSION.SDK_INT >= 33) {
                 a.requestPermissions(
@@ -132,9 +141,10 @@ class SetupWizardActivity : Activity() {
             }
         },
         PermItem(
-            "3. Popup (Doosri apps ke upar dikhna)",
-            "3 se zyada buttons wale flows Popup me khulenge — uske liye app ko " +
-                "screen ke upar dikhne ki ijaazat chahiye."
+            "3. Popup (Display over other apps)",
+            "Flows with more than 3 buttons open in a Popup — for that, " +
+                "the app needs permission to appear on top of the screen.",
+            granted = { Settings.canDrawOverlays(this@SetupWizardActivity) }
         ) { a ->
             val i = Intent(
                 Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
@@ -144,40 +154,53 @@ class SetupWizardActivity : Activity() {
         },
         PermItem(
             "4. Device Admin",
-            "Lock Phone button aur Ghuspaithiya Alert (galat password attempts) " +
-                "ke liye. Note: aapka PIN hum kabhi padh hi nahi sakte — Android " +
-                "woh kisi ko deta hi nahi."
+            "For the Lock Phone button and the Intruder Alert (wrong " +
+                "password attempts). Note: your PIN can never be read " +
+                "by us — Android gives it to no one.",
+            granted = { WorkflowPermissions.isDeviceAdminOn(this@SetupWizardActivity) }
         ) { a ->
             val admin = ComponentName(a, CareDeviceAdminReceiver::class.java)
             val i = Intent(DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN)
             i.putExtra(DevicePolicyManager.EXTRA_DEVICE_ADMIN, admin)
             i.putExtra(
                 DevicePolicyManager.EXTRA_ADD_EXPLANATION,
-                "Lock Phone aur galat-password alert ke liye My Care ko device admin chahiye."
+                "My Care needs Device Admin for Lock Phone and the wrong-password Intruder Alert."
             )
             a.startActivity(i)
         },
         PermItem(
             "5. Accessibility",
-            "Close App button ke liye — is se My Care seedha Home screen " +
-                "par bhej pata hai. Settings me 'Installed services' ke " +
-                "andar 'My Care' naam se service milegi — use ON karna hoga. " +
-                "Note: yeh service screen ka content nahi padhti."
+            "For the Close App button — with it, My Care can send you " +
+                "straight to the Home screen. In Settings, inside " +
+                "'Installed services', you will find a service named " +
+                "'My Care' — turn it ON. Note: this service does NOT " +
+                "read your screen's content.",
+            granted = { WorkflowPermissions.isAccessibilityOn(this@SetupWizardActivity) }
         ) { a ->
             a.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
         },
         PermItem(
             "6. Contacts",
-            "Naya contact save ho to 'WhatsApp par kholo' wala suggestion dene " +
-                "ke liye — sirf naye contact ki khabar, pura data nahi uthate."
+            "So that when a new contact is saved, you get the 'Open on " +
+                "WhatsApp' suggestion — only the news of the new " +
+                "contact, never your whole address book.",
+            granted = { runtimeGranted(Manifest.permission.READ_CONTACTS) }
         ) { a ->
             a.requestPermissions(arrayOf(Manifest.permission.READ_CONTACTS), 102)
         },
         PermItem(
             "7. Photos / Media",
-            "Screenshot Safai flow ke liye — 0.2.5 se My Care Screenshots " +
-                "folder par nazar rakhkar naye screenshot ki khabar deta hai " +
-                "aur, aapke kehne par, use delete bhi karta hai."
+            "For the Screenshot Cleanup flow — My Care watches the " +
+                "Screenshots folder, tells you about a new screenshot, " +
+                "and deletes it later only when you say so.",
+            granted = {
+                val perm = if (Build.VERSION.SDK_INT >= 33) {
+                    Manifest.permission.READ_MEDIA_IMAGES
+                } else {
+                    Manifest.permission.READ_EXTERNAL_STORAGE
+                }
+                runtimeGranted(perm)
+            }
         ) { a ->
             val perm = if (Build.VERSION.SDK_INT >= 33) {
                 Manifest.permission.READ_MEDIA_IMAGES
@@ -187,29 +210,34 @@ class SetupWizardActivity : Activity() {
             a.requestPermissions(arrayOf(perm), 103)
         },
         PermItem(
-            "8. Battery bandish hatayein",
-            "Infinix ka system battery bachane ke chakkar me app ko sula deta " +
-                "hai — to notifications ruk jayengi. My Care ko is bandish se " +
-                "bahar rakhna zaroori hai."
+            "8. Remove battery restrictions",
+            "Infinix's system puts apps to sleep to save battery — " +
+                "then notifications stop. My Care must be kept out of " +
+                "that restriction.",
+            granted = {
+                val pm = getSystemService(PowerManager::class.java)
+                pm?.isIgnoringBatteryOptimizations(packageName) ?: false
+            }
         ) { a ->
             val i = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
             i.data = Uri.parse("package:" + a.packageName)
             a.startActivity(i)
         },
         PermItem(
-            "9. System Settings (Brightness badalna)",
-            "0.2.6 ke set_brightness button ke liye — jaise raat ko screen " +
-                "ki chamak kam karne wala workflow. Yeh ek khaas SYSTEM-LEVEL " +
-                "ijaazat hai: khulne wali screen par My Care ko 'Allow " +
-                "modifying system settings' ON karna hoga. Bina iske " +
-                "brightness wale buttons sirf suchna denge, kaam nahi karenge.",
+            "9. System Settings (Change brightness)",
+            "For set_brightness actions — like the evening workflow " +
+                "that dims the screen. This is a special SYSTEM-LEVEL " +
+                "grant: on the screen that opens, turn ON 'Allow " +
+                "modifying system settings' for My Care. Without it, " +
+                "brightness actions only inform you, they cannot act.",
+            granted = { Settings.System.canWrite(this@SetupWizardActivity) },
             statusText = {
                 if (Settings.System.canWrite(this@SetupWizardActivity)) {
-                    "Sthiti: MILI HAI ✓ — set_brightness wale buttons kaam karenge."
+                    "Status: GRANTED ✅ — set_brightness actions will work."
                 } else {
-                    "Sthiti: NAHI MILI ✗ — set_brightness wale buttons abhi " +
-                        "brightness nahi badal sakte. Neeche wala button dabakar " +
-                        "My Care ko yeh ijaazat de dein."
+                    "Status: NOT GRANTED ❌ — set_brightness actions cannot " +
+                        "change brightness yet. Tap the button below and " +
+                        "grant My Care this permission."
                 }
             }
         ) { a ->
@@ -219,23 +247,38 @@ class SetupWizardActivity : Activity() {
         },
         PermItem(
             "10. Notification Access",
-            "0.2.6 ke notification_posted trigger ke liye — doosre apps ki " +
-                "notifications par workflow chalana (jaise kisi khaas app ka " +
-                "message aate hi yaad dilana). Khulne wali screen me My Care " +
-                "ko ON karein. Pakki baat: My Care kisi notification ka text " +
-                "kabhi save nahi karta — sirf matching par workflow bajta hai, " +
-                "aur iske bina yeh trigger poori tarah band rehta hai.",
+            "For the notification_posted trigger — running a workflow " +
+                "when another app's notification arrives. On the screen " +
+                "that opens, turn My Care ON. A firm promise: My Care " +
+                "never saves any notification's text — only a matching " +
+                "workflow fires, and without this grant the trigger " +
+                "stays completely off.",
+            granted = { CareNotificationListener.isAccessGranted(this@SetupWizardActivity) },
             statusText = {
                 if (CareNotificationListener.isAccessGranted(this@SetupWizardActivity)) {
-                    "Sthiti: MILI HAI ✓ — notification_posted wale workflows chal sakte hain."
+                    "Status: GRANTED ✅ — notification_posted workflows can run."
                 } else {
-                    "Sthiti: NAHI MILI ✗ — notification_posted trigger abhi " +
-                        "BAND hai. Neeche wala button dabakar khulne wali list " +
-                        "me My Care ko ON kar dein."
+                    "Status: NOT GRANTED ❌ — the notification_posted trigger is " +
+                        "OFF right now. Tap the button below and turn My Care " +
+                        "ON in the list that opens."
                 }
             }
         ) { a ->
             a.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+        },
+        PermItem(
+            "11. Camera (Intruder photo)",
+            "NEW in 0.2.8: when someone enters the wrong PIN/password " +
+                "repeatedly, the Intruder Alert captures a photo with " +
+                "the FRONT camera and attaches it to the alert. The " +
+                "photo is taken only at that moment, is stored only " +
+                "inside the app on this phone, and you can see all " +
+                "captures under System -> Running Services. Without " +
+                "this permission you still get the text alert — just " +
+                "no photo.",
+            granted = { runtimeGranted(Manifest.permission.CAMERA) }
+        ) { a ->
+            a.requestPermissions(arrayOf(Manifest.permission.CAMERA), 104)
         }
     )
 }

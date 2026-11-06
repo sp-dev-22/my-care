@@ -6,15 +6,19 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.graphics.BitmapFactory
 import android.os.Build
 import com.spdev22.mycare.MainActivity
 import com.spdev22.mycare.data.LogStore
 import com.spdev22.mycare.data.WorkflowOverrides
+import com.spdev22.mycare.engine.DirectActions
 import com.spdev22.mycare.engine.WfButton
 import com.spdev22.mycare.engine.WfStep
 import com.spdev22.mycare.engine.Workflow
+import com.spdev22.mycare.ui.CapturesActivity
 import com.spdev22.mycare.ui.PopupActivity
 import com.spdev22.mycare.ui.TrampolineActivity
+import java.io.File
 
 /**
  * NotifyFactory — Workflow Format v1 se asli notifications banata hai.
@@ -51,7 +55,7 @@ object NotifyFactory {
                     "Care Suggestions",
                     NotificationManager.IMPORTANCE_DEFAULT
                 )
-                channel.description = "My Care ke care suggestions aur workflows"
+                channel.description = "My Care suggestions and workflow alerts"
                 manager?.createNotificationChannel(channel)
             }
         }
@@ -101,6 +105,10 @@ object NotifyFactory {
         // (Buttons effective() nahi badalta, isliye runtime par bane
         // khaas buttons — jaise contact ka WhatsApp button — bache rehte hain.)
         val eff = WorkflowOverrides.effective(context, wf)
+        // 0.2.8: a workflow-level direct action (set_brightness /
+        // set_volume) runs IMMEDIATELY on fire — the notification
+        // below remains the visible record, the result is logged.
+        DirectActions.executeIfAny(context, eff)
         val notifId = notifIdFor(wf.id)
         val title = applyVars(eff.title, vars)
         val text = applyVars(eff.text, vars)
@@ -142,6 +150,59 @@ object NotifyFactory {
 
         manager(context)?.notify(notifId, builder.build())
         LogStore.log(context, "FIRE ${wf.id} — $title")
+    }
+
+    /**
+     * 0.2.8: the intruder alert WITH the captured front-camera photo
+     * as the large picture. Uses the workflow's own notification id,
+     * so it upgrades the plain text alert posted moments earlier.
+     * Tapping it opens the in-app captures list.
+     */
+    fun postIntruderPhoto(context: Context, wf: Workflow, photo: File) {
+        ensureChannel(context)
+        val eff = WorkflowOverrides.effective(context, wf)
+        val notifId = notifIdFor(wf.id)
+        val bitmap = try {
+            val opts = BitmapFactory.Options().apply { inSampleSize = 2 }
+            BitmapFactory.decodeFile(photo.absolutePath, opts)
+        } catch (e: Exception) {
+            null
+        }
+        if (bitmap == null) {
+            LogStore.log(context, "Intruder photo notification skipped — image could not be decoded")
+            return
+        }
+        val contentIntent = Intent(context, CapturesActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        }
+        val contentPi = PendingIntent.getActivity(
+            context, notifId + 31, contentIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val text = applyVars(eff.text, emptyMap()) +
+            "\n📸 A photo was captured — tap to view it in the app."
+        val builder = newBuilder(context)
+            .setContentTitle(applyVars(eff.title, emptyMap()))
+            .setContentText(text)
+            .setStyle(
+                Notification.BigPictureStyle()
+                    .bigPicture(bitmap)
+                    .bigContentTitle(applyVars(eff.title, emptyMap()))
+                    .summaryText(text)
+            )
+            .setSmallIcon(android.R.drawable.ic_dialog_alert)
+            .setContentIntent(contentPi)
+            .setAutoCancel(true)
+        for ((index, btn) in eff.buttons.take(3).withIndex()) {
+            builder.addAction(
+                Notification.Action.Builder(
+                    iconFor(btn.action), btn.label,
+                    trampolineIntent(context, wf.id, notifId, btn, index)
+                ).build()
+            )
+        }
+        manager(context)?.notify(notifId, builder.build())
+        LogStore.log(context, "FIRE ${wf.id} — intruder alert WITH photo (${photo.name})")
     }
 
     /** Multi-step flow ka agla step ek nayi notification ke roop me. */

@@ -81,22 +81,27 @@ object CareChecks {
 
         fun stamp() = CareSettings.setStateLong(context, "state_cache_eval", now)
 
+        fun result(note: String) =
+            CareSettings.setStateStr(context, "state_cache_last_result", note)
+
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
             stamp()
+            result("SKIPPED — StorageStats not available on this Android")
             LogStore.log(
                 context,
-                "Cache Safai eval: SKIP — is Android par StorageStats nahi " +
-                    "milta (threshold ${thresholdMb}MB)"
+                "Cache Cleanup eval: SKIP — StorageStats is not available " +
+                    "on this Android (threshold ${thresholdMb}MB)"
             )
             return false
         }
         if (!UsageTracker.hasUsageAccess(context)) {
             stamp()
+            result("SKIPPED — Usage Access not granted")
             LogStore.log(
                 context,
-                "Cache Safai eval: SKIP — Usage Access NAHI hai " +
-                    "(threshold ${thresholdMb}MB). Setup Wizard me Usage " +
-                    "Access ON karein — bina iske Cache Safai kabhi nahi chalegi."
+                "Cache Cleanup eval: SKIP — Usage Access NOT granted " +
+                    "(threshold ${thresholdMb}MB). Turn ON Usage Access in " +
+                    "the Setup Wizard — without it Cache Cleanup can never run."
             )
             return false
         }
@@ -104,9 +109,10 @@ object CareChecks {
             as? StorageStatsManager
         if (ssm == null) {
             stamp()
+            result("SKIPPED — StorageStatsManager unavailable")
             LogStore.log(
                 context,
-                "Cache Safai eval: SKIP — StorageStatsManager nahi mila " +
+                "Cache Cleanup eval: SKIP — StorageStatsManager not found " +
                     "(threshold ${thresholdMb}MB)"
             )
             return false
@@ -145,28 +151,31 @@ object CareChecks {
             }
         } catch (e: Exception) {
             Log.w(TAG, "Cache check fail: ${e.message}")
-            LogStore.log(context, "Cache Safai eval: FAIL — scan error: ${e.message}")
+            result("FAILED — scan error")
+            LogStore.log(context, "Cache Cleanup eval: FAIL — scan error: ${e.message}")
             return false
         }
 
-        val scanNote = "scan ${scanned} apps (errors $statErrors), " +
-            "kul cache ${totalCache / 1_000_000L}MB, sabse bada " +
+        val scanNote = "scanned ${scanned} apps (errors $statErrors), " +
+            "total cache ${totalCache / 1_000_000L}MB, largest " +
             (worstPkg?.let {
                 "${HisaabBuilder.appLabel(context, it)} ${worstCache / 1_000_000L}MB"
-            } ?: "koi nahi") +
+            } ?: "none") +
             ", threshold ${thresholdMb}MB"
 
         val pkg = worstPkg
         if (pkg == null || worstCache < thresholdBytes) {
-            LogStore.log(context, "Cache Safai eval: BELOW THRESHOLD — $scanNote")
+            result("Below threshold — largest cache ${worstCache / 1_000_000L}MB of ${thresholdMb}MB")
+            LogStore.log(context, "Cache Cleanup eval: BELOW THRESHOLD — $scanNote")
             return false
         }
         val lastKey = "state_cache_notified_$pkg"
         if (now - CareSettings.stateLong(context, lastKey) < 3 * DAY_MS) {
+            result("Cooldown — $pkg was already suggested in the last 3 days")
             LogStore.log(
                 context,
-                "Cache Safai eval: COOLDOWN — $pkg ko 3 din ke andar " +
-                    "suggestion ja chuka hai — $scanNote"
+                "Cache Cleanup eval: COOLDOWN — $pkg already got a " +
+                    "suggestion within 3 days — $scanNote"
             )
             return false
         }
@@ -176,7 +185,7 @@ object CareChecks {
         val runtime = wf.copy(
             buttons = listOf(
                 WfButton(
-                    "App Info kholo", "open_app_info",
+                    "Open App Info", "open_app_info",
                     mapOf("package" to pkg)
                 ),
                 WfButton("Skip", "skip")
@@ -189,7 +198,8 @@ object CareChecks {
                 "cache" to "${cacheMb} MB"
             )
         )
-        LogStore.log(context, "Cache Safai FIRE: $pkg (${cacheMb}MB) — $scanNote")
+        result("FIRED — $pkg cache ${cacheMb}MB")
+        LogStore.log(context, "Cache Cleanup FIRE: $pkg (${cacheMb}MB) — $scanNote")
         return true
     }
 
@@ -242,7 +252,7 @@ object CareChecks {
             val runtime = wf.copy(
                 buttons = listOf(
                     WfButton(
-                        "App Info kholo", "open_app_info",
+                        "Open App Info", "open_app_info",
                         mapOf("package" to pkg)
                     ),
                     WfButton("Skip", "skip")
@@ -255,7 +265,7 @@ object CareChecks {
                     "count" to candidates.size.toString()
                 )
             )
-            LogStore.log(context, "Unused Apps fire: $pkg (kul ${candidates.size} aise apps)")
+            LogStore.log(context, "Unused Apps fired: $pkg (${candidates.size} such apps in total)")
             true
         } catch (e: Exception) {
             Log.w(TAG, "Unused check fail: ${e.message}")

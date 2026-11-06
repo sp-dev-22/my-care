@@ -15,6 +15,7 @@ import com.spdev22.mycare.data.UserWorkflowStore
 import com.spdev22.mycare.engine.WorkflowEngine
 import com.spdev22.mycare.notify.DailyScheduler
 import com.spdev22.mycare.settings.SettingsActivity
+import com.spdev22.mycare.setup.WorkflowPermissions
 
 /**
  * "AI se Workflow banwao" (0.2.5) — user apni baat apne shabdon me
@@ -37,28 +38,29 @@ class AiWorkflowActivity : Activity() {
         super.onCreate(savedInstanceState)
 
         val root = UiKit.root(this)
-        setContentView(UiKit.scroll(this, root))
+        UiKit.tabScreen(this, root, UiKit.TAB_AI)
 
-        root.addView(UiKit.title(this, "✨ AI se Workflow banwao"))
+        root.addView(UiKit.title(this, "✨ Make a Workflow with AI"))
         root.addView(
             UiKit.subtitle(
                 this,
-                "Apni marzi ka workflow apne shabdon me likh dijiye, Boss — " +
-                    "Gemini use My Care ke format me badal dega aur woh " +
-                    "turant live ho jayega. Hinglish, Hindi ya English — " +
-                    "jaisa mann kare."
+                "Describe the workflow you want in your own words, " +
+                    "Boss — Gemini will convert it into My Care's " +
+                    "format and it goes live immediately. Describe it " +
+                    "in Hindi, Hinglish or English — the workflow " +
+                    "itself is always created in English."
             )
         )
 
         val card = UiKit.card(this)
-        card.addView(UiKit.label(this, "Kaisa workflow chahiye?"))
-        descInput = UiKit.input(this, "Jaise: raat 10 baje paani peene ki yaad dilao, roz").apply {
+        card.addView(UiKit.label(this, "What kind of workflow do you want?"))
+        descInput = UiKit.input(this, "e.g. Remind me to drink water at 10 pm, every day").apply {
             setSingleLine(false)
             minLines = 3
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
         }
         card.addView(descInput)
-        makeBtn = UiKit.primaryButton(this, "✨ Banwao")
+        makeBtn = UiKit.primaryButton(this, "✨ Create it")
         makeBtn.setOnClickListener { onMakeClicked() }
         card.addView(makeBtn)
         statusView = UiKit.small(this, "")
@@ -69,11 +71,11 @@ class AiWorkflowActivity : Activity() {
         info.addView(
             UiKit.small(
                 this,
-                "Note: Iske liye Settings me aapki Gemini API key aur " +
-                    "internet chahiye. Key sirf aapke phone me rehti hai. " +
-                    "Bane hue workflows 'Workflows — On/Off' list me " +
-                    "milenge — wahan se band karna, message/time/limits " +
-                    "badalna aur (AI walon ko) delete karna bhi hoga."
+                "Note: this needs your Gemini API key (in Settings) " +
+                    "and internet. The key stays only on your phone. " +
+                    "Created workflows appear in the 'Workflows' tab — " +
+                    "from there you can switch them off, edit their " +
+                    "message/time/limits, and delete the AI-made ones."
             )
         )
         root.addView(info)
@@ -82,24 +84,24 @@ class AiWorkflowActivity : Activity() {
     private fun onMakeClicked() {
         val description = descInput.text.toString().trim()
         if (description.length < 8) {
-            toast("Thoda vistar se likhiye, Boss — kya, kab aur kyun?")
+            toast("Please describe it a bit more, Boss — what, when and why?")
             return
         }
         val apiKey = CareSettings.geminiKey(this)
         if (apiKey == null) {
-            statusView.text = "Gemini API key nahi mili. Pehle Settings me " +
-                "apni key daal dijiye — phir yahan aakar Banwao dabaiye."
+            statusView.text = "No Gemini API key found. Please add your " +
+                "key in Settings first — then come back and tap Create."
             statusView.setTextColor(UiKit.DANGER)
-            toast("Pehle Settings me Gemini API key daalein, Boss")
+            toast("Add your Gemini API key in Settings first, Boss")
             startActivity(Intent(this, SettingsActivity::class.java))
             return
         }
         val model = CareSettings.geminiModel(this)
         makeBtn.isEnabled = false
-        makeBtn.text = "⏳ Gemini soch raha hai…"
+        makeBtn.text = "⏳ Gemini is thinking…"
         statusView.setTextColor(UiKit.MUTED)
-        statusView.text = "Gemini ($model) se baat ho rahi hai — " +
-            "internet ki raftaar par nirbhar hai, kuch second lag sakte hain."
+        statusView.text = "Talking to Gemini ($model) — this can take " +
+            "a few seconds, depending on your internet speed."
 
         // Network ka kaam background thread par — Go phone par
         // main thread kabhi block nahi hoga.
@@ -116,13 +118,13 @@ class AiWorkflowActivity : Activity() {
 
     private fun onResult(result: GeminiClient.Result) {
         makeBtn.isEnabled = true
-        makeBtn.text = "✨ Banwao"
+        makeBtn.text = "✨ Create it"
         when (result) {
             is GeminiClient.Result.Failure -> {
                 statusView.setTextColor(UiKit.DANGER)
                 statusView.text = "❌ " + result.message
-                LogStore.log(this, "AI workflow FAIL: ${result.message}")
-                toast("Workflow nahi bana, Boss — wajah neeche likhi hai")
+                LogStore.log(this, "AI workflow FAILED: ${result.message}")
+                toast("The workflow could not be created, Boss — the reason is written below")
             }
             is GeminiClient.Result.Success -> {
                 UserWorkflowStore.save(this, result.workflowJson)
@@ -136,15 +138,20 @@ class AiWorkflowActivity : Activity() {
                 }
                 LogStore.log(
                     this,
-                    "AI workflow bana: '${result.name}' " +
+                    "AI workflow created: '${result.name}' " +
                         "(id=${result.workflowJson.optString("id")})"
                 )
                 statusView.setTextColor(UiKit.TEAL_DARK)
-                statusView.text = "✅ Ban gaya: '${result.name}' — ab yeh " +
-                    "live hai! 'Workflows — On/Off' list me ise band karna, " +
-                    "edit karna ya delete karna — sab hoga."
+                statusView.text = "✅ Created: '${result.name}' — it is " +
+                    "live now! In the 'Workflows' tab you can switch " +
+                    "it off, edit it, or delete it."
                 descInput.text.clear()
-                toast("Workflow ban gaya: ${result.name} 🎉")
+                toast("Workflow created: ${result.name} 🎉")
+                // 0.2.8: the new workflow lands ENABLED — check its
+                // permissions right away and offer the missing ones
+                if (wf != null && wf.enabled) {
+                    WorkflowPermissions.promptIfMissing(this, wf)
+                }
             }
         }
     }

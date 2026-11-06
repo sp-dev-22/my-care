@@ -51,7 +51,7 @@ class AppPickerActivity : Activity() {
         root.addView(
             UiKit.title(
                 this, when (mode) {
-                    "group" -> "'$groupName' group ke apps chunein"
+                    "group" -> "Choose apps for the '$groupName' group"
                     else -> slotTitle(slot)
                 }
             )
@@ -59,15 +59,15 @@ class AppPickerActivity : Activity() {
         root.addView(
             UiKit.subtitle(
                 this, when (mode) {
-                    "group" -> "Jo apps is group me hone chahiye, unpar tick rakhein. " +
-                        "Tap karte hi save ho jata hai."
-                    else -> "Is kaam ke liye kaun sa app khule, woh chunein. " +
-                        "'Auto' par pack ke defaults chalenge."
+                    "group" -> "Keep a tick on the apps that should be in this group. " +
+                        "It saves the moment you tap."
+                    else -> "Choose which app should open for this task. " +
+                        "On 'Auto', the pack defaults are used."
                 }
             )
         )
         root.addView(CheckBox(this).apply {
-            text = "System apps bhi dikhao"
+            text = "Show system apps too"
             textSize = 15f
             setTextColor(UiKit.INK)
             UiKit.tintCheckBox(this@AppPickerActivity, this)
@@ -109,7 +109,7 @@ class AppPickerActivity : Activity() {
     }
 
     private fun buildSlotList(listView: ListView) {
-        val labels = mutableListOf("Auto (pack ke defaults)")
+        val labels = mutableListOf("Auto (pack defaults)")
         labels.addAll(entries.map { "${it.label}  (${it.pkg})" })
         listView.adapter = ArrayAdapter(
             this, android.R.layout.simple_list_item_1, labels
@@ -117,12 +117,12 @@ class AppPickerActivity : Activity() {
         listView.setOnItemClickListener { _, _, position, _ ->
             if (position == 0) {
                 CareSettings.setTargetApp(this, slot, null)
-                toast("Auto par set ho gaya")
+                toast("Set to Auto")
                 LogStore.log(this, "Target app [$slot] = Auto")
             } else {
                 val e = entries[position - 1]
                 CareSettings.setTargetApp(this, slot, e.pkg)
-                toast("${e.label} set ho gaya")
+                toast("${e.label} is set")
                 LogStore.log(this, "Target app [$slot] = ${e.pkg}")
             }
             finish()
@@ -196,11 +196,11 @@ class AppPickerActivity : Activity() {
     }
 
     private fun slotTitle(slot: String): String = when (slot) {
-        "music" -> "Music button ke liye app chunein"
-        "video" -> "Videos / YouTube button ke liye app chunein"
-        "chat" -> "Muse AI / WhatsApp button ke liye app chunein"
-        "clock" -> "Alarm ke liye Clock app chunein"
-        else -> "Target app chunein"
+        "music" -> "Choose the app for the Music button"
+        "video" -> "Choose the app for the Videos / YouTube button"
+        "chat" -> "Choose the app for the Muse AI / WhatsApp button"
+        "clock" -> "Choose the Clock app for alarms"
+        else -> "Choose the target app"
     }
 
     private fun toast(msg: String) =

@@ -30,8 +30,10 @@ data class Workflow(
     val botType: String,
     val title: String,
     val text: String,
-    /** Top-level action (jaise battery workflow ka set_alarm), ho to uska type */
+    /** Top-level action (e.g. the battery workflow's set_alarm), its type if present */
     val primaryAction: String? = null,
+    /** 0.2.8: the top-level action's remaining fields (percent, after_minutes, title...) */
+    val primaryActionArgs: Map<String, String> = emptyMap(),
     val buttons: List<WfButton> = emptyList(),
     val steps: List<WfStep> = emptyList(),
     val settings: Map<String, String> = emptyMap()

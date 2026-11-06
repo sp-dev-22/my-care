@@ -2,5 +2,5 @@
 <resources>
     <string name="app_name">My Care</string>
     <string name="accessibility_service_label">My Care</string>
-    <string name="accessibility_service_description">My Care ko Close App jaise actions ke liye Home jaane ki aur foreground app pehchanne ki ijaazat chahiye. Yeh service screen ka content NAHI padhti.</string>
+    <string name="accessibility_service_description">My Care needs this to send you to the Home screen for actions like Close App, and to recognise the foreground app. This service does NOT read your screen's content.</string>
 </resources>

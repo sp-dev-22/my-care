@@ -30,13 +30,14 @@ object HisaabBuilder {
 
     fun buildText(context: Context): String {
         if (!UsageTracker.hasUsageAccess(context)) {
-            return "Boss, Usage Access nahi mila — hisaab nahi ban paya. " +
-                "Setup Wizard se woh permission de dijiye, kal se hisaab pakka milega."
+            return "Boss, Usage Access is not granted — the account could " +
+                "not be made. Please grant it in the Setup Wizard, and from " +
+                "tomorrow your daily account will be ready."
         }
         val totals = queryTodayTotals(context)
         if (totals.isEmpty()) {
-            return "Aaj ka hisaab: aaj phone ka usage record bahut kam hai. " +
-                "Kal ka din aur behtar hoga, Boss!"
+            return "Today's account: very little phone usage was recorded " +
+                "today. Tomorrow will be a better day, Boss!"
         }
 
         val totalMs = totals.values.sum()
@@ -61,26 +62,26 @@ object HisaabBuilder {
         val entMs = totals.filterKeys { entPkgs.contains(it) }.values.sum()
 
         val sb = StringBuilder()
-        sb.append("Kul phone aaj: ").append(fmt(totalMs)).append(". ")
+        sb.append("Total phone today: ").append(fmt(totalMs)).append(". ")
         if (studyPkgs.isNotEmpty() || entPkgs.isNotEmpty()) {
-            sb.append("Padhai apps: ").append(fmt(studyMs))
-                .append(" • Manoranjan: ").append(fmt(entMs)).append(". ")
+            sb.append("Study apps: ").append(fmt(studyMs))
+                .append(" • Entertainment: ").append(fmt(entMs)).append(". ")
         } else {
-            sb.append("App Groups me apps jod dijiye — phir padhai vs " +
-                "manoranjan ka hisaab bhi yahin milega. ")
+            sb.append("Add apps to your App Groups — then the study vs " +
+                "entertainment account will appear here too. ")
         }
 
         val top = totals.maxByOrNull { it.value }
         if (top != null && top.value > 0) {
-            sb.append("Sabse zyada chala: ").append(appLabel(context, top.key))
+            sb.append("Most used: ").append(appLabel(context, top.key))
                 .append(" (").append(fmt(top.value)).append("). ")
         }
 
         if (studyPkgs.isNotEmpty() || entPkgs.isNotEmpty()) {
             if (studyMs >= entMs && studyMs > 0) {
-                sb.append("Bahut badhiya, Boss — aaj padhai aage rahi! 👏")
+                sb.append("Well done, Boss — study stayed ahead today! 👏")
             } else if (entMs > 0) {
-                sb.append("Kal padhai ko thoda aage rakhte hain, Boss. 💪")
+                sb.append("Let's keep study a little ahead tomorrow, Boss. 💪")
             }
         }
 
@@ -118,16 +119,16 @@ object HisaabBuilder {
             if (totalMs <= 0) return ""
             val avgPerDay = totalMs / 7
             val sb = StringBuilder()
-            sb.append("Pattern (7 din): roz average phone ~")
+            sb.append("Pattern (7 days): daily average phone ~")
                 .append(fmt(avgPerDay)).append(".")
             val top = perPkg.maxByOrNull { it.value }
             if (top != null) {
-                sb.append(" Is hafte sabse zyada: ")
+                sb.append(" Most used this week: ")
                     .append(appLabel(context, top.key))
                     .append(" (").append(fmt(top.value)).append(").")
             }
             if (avgPerDay > 5 * 60 * 60_000L) {
-                sb.append(" Average zyada hai, Boss — kal thoda kam rakhte hain.")
+                sb.append(" The average is high, Boss — let's keep it a little lower tomorrow.")
             }
             sb.toString()
         } catch (e: Exception) {

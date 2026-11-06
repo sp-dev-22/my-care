@@ -94,6 +94,17 @@ object WorkflowEngine {
             }
         }
 
+        val actionArgs = mutableMapOf<String, String>()
+        if (action != null) {
+            val aKeys = action.keys()
+            while (aKeys.hasNext()) {
+                val k = aKeys.next()
+                if (k != "type") {
+                    actionArgs[k] = action.opt(k)?.toString() ?: ""
+                }
+            }
+        }
+
         return Workflow(
             id = obj.optString("id"),
             name = obj.optString("name", obj.optString("id")),
@@ -104,6 +115,7 @@ object WorkflowEngine {
             title = message?.optString("title") ?: "",
             text = message?.optString("text") ?: "",
             primaryAction = action?.optString("type")?.takeIf { it.isNotEmpty() },
+            primaryActionArgs = actionArgs,
             buttons = parseButtons(obj.optJSONArray("buttons")),
             steps = steps,
             settings = parseSettings(obj.optJSONObject("settings"))

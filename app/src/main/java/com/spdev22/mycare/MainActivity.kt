@@ -4,42 +4,44 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.content.Intent
 import android.os.Bundle
+import android.view.View
 import android.view.ViewGroup
-import android.widget.ArrayAdapter
 import android.widget.EditText
 import android.widget.LinearLayout
-import android.widget.ListView
 import android.widget.TextView
 import android.widget.Toast
-import com.spdev22.mycare.data.AppGroup
 import com.spdev22.mycare.data.GroupStore
 import com.spdev22.mycare.engine.WorkflowEngine
 import com.spdev22.mycare.service.CareService
-import com.spdev22.mycare.settings.SettingsActivity
-import com.spdev22.mycare.setup.SetupWizardActivity
-import com.spdev22.mycare.ui.AiWorkflowActivity
 import com.spdev22.mycare.ui.AppPickerActivity
-import com.spdev22.mycare.ui.LogsActivity
 import com.spdev22.mycare.ui.UiKit
-import com.spdev22.mycare.ui.WorkflowListActivity
 
 /**
- * Main screen:
- * App Groups ki list + naya group banana (D1),
- * Setup Wizard, Workflow Pack, Settings, Logs aur — 0.2.5 se —
- * "AI se Workflow banwao" (Gemini) ke raaste,
- * aur Care Service (live engine) chalu karna.
+ * Home tab (0.2.8):
+ *  - Care Service status + start button
+ *  - App Groups (D1): tappable rows to pick each group's apps,
+ *    long-press to delete, "+ New Group" to create
  *
- * 0.2.5: UiKit se naya minimal, beautiful look — shaant palette,
- * safed cards, teal buttons.
+ * 0.2.8 group-list fix (the blank/broken groups box): the old code
+ * put a ListView inside a card whose height was 0 + weight 1 in a
+ * NON-scrolling root, next to ~7 fixed-height buttons. On a small
+ * phone the fixed children ate the whole screen and the weighted
+ * card (and its ListView) was squeezed to zero height — so the box
+ * looked broken BOTH when the list was empty and when groups
+ * existed. Now the whole screen scrolls (tab screen) and the
+ * groups live in a plain WRAP_CONTENT card whose rows are built
+ * directly as views — no ListView, no adapter, nothing to squeeze.
+ *
+ * Navigation to Workflows / AI / Settings / System is the bottom
+ * tab bar (UiKit) — nothing that was reachable before is lost:
+ * the tab bar and the System tab carry every old entry.
  */
 class MainActivity : Activity() {
 
-    private lateinit var groupListView: ListView
     private lateinit var statusView: TextView
-    private lateinit var listCard: LinearLayout
+    private lateinit var serviceView: TextView
+    private lateinit var groupsCard: LinearLayout
     private lateinit var groupsHint: TextView
-    private var groups: MutableList<AppGroup> = mutableListOf()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -49,11 +51,11 @@ class MainActivity : Activity() {
         root.addView(
             UiKit.subtitle(
                 this,
-                "Jo aapke phone ka aur aapka — dono ka khayal rakhe.\n" +
-                    "v0.2.6: saare 16 workflows zinda hain, Gemini AI se apne " +
-                    "workflows bhi ban sakte hain — ab volume, brightness aur " +
-                    "doosre apps ki notifications par bhi. Group par tap karke " +
-                    "uske apps chunein."
+                "The caretaker for you and your phone.\n" +
+                    "v0.2.8: tabs, full English, a Running Services page, " +
+                    "one default workflow for every permission, and the " +
+                    "Intruder Alert now captures a photo. Tap a group to " +
+                    "choose its apps."
             )
         )
 
@@ -61,102 +63,40 @@ class MainActivity : Activity() {
         root.addView(statusView)
         root.addView(UiKit.gap(this, 6))
 
-        root.addView(UiKit.section(this, "Mere App Groups"))
-
-        // Groups ki list ek safed card ke andar.
-        // 0.2.6 UI FIX: group na hon to card BILKUL nahi dikhta —
-        // pehle khaali safed dabba screen par latka rehta tha.
-        // Uski jagah ek halki si hint line aati hai (refreshGroups).
-        listCard = UiKit.card(this).apply {
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f
-            )
+        // ---- Care Service status / start ----
+        val serviceCard = UiKit.card(this)
+        serviceView = UiKit.body(this, "", 15f)
+        serviceCard.addView(serviceView)
+        val serviceBtn = UiKit.primaryButton(this, "Start Care Service")
+        serviceBtn.setOnClickListener {
+            CareService.start(this)
+            toast("Care Service start requested — triggers are live")
+            refreshService()
         }
-        groupListView = ListView(this).apply {
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            )
-            setBackgroundColor(android.graphics.Color.TRANSPARENT)
-            divider = null
-        }
-        listCard.addView(groupListView)
-        root.addView(listCard)
+        serviceCard.addView(serviceBtn)
+        root.addView(serviceCard)
 
+        // ---- App Groups ----
+        root.addView(UiKit.section(this, "My App Groups"))
+        groupsCard = UiKit.card(this)
+        root.addView(groupsCard)
         groupsHint = UiKit.small(
             this,
-            "Abhi koi group nahi hai — pehla group banao, jaise Padhai " +
-                "ya Manoranjan. Group par tap karke usme apps jodein."
+            "No groups yet — create your first group, like Padhai " +
+                "(Study) or Manoranjan (Entertainment). Tap a group " +
+                "to add apps to it."
         )
         root.addView(groupsHint)
 
-        val addBtn = UiKit.primaryButton(this, "+ Naya Group banao")
+        val addBtn = UiKit.primaryButton(this, "+ Create New Group")
         addBtn.setOnClickListener { showAddGroupDialog() }
         root.addView(addBtn)
 
-        val aiBtn = UiKit.accentButton(this, "✨ AI se Workflow banwao (Gemini)")
-        aiBtn.setOnClickListener {
-            startActivity(Intent(this, AiWorkflowActivity::class.java))
-        }
-        root.addView(aiBtn)
-
-        val packBtn = UiKit.secondaryButton(this, "Workflows — On/Off")
-        packBtn.setOnClickListener {
-            startActivity(Intent(this, WorkflowListActivity::class.java))
-        }
-        root.addView(packBtn)
-
-        val settingsBtn = UiKit.secondaryButton(this, "Settings — Time aur Limits")
-        settingsBtn.setOnClickListener {
-            startActivity(Intent(this, SettingsActivity::class.java))
-        }
-        root.addView(settingsBtn)
-
-        val wizardBtn = UiKit.secondaryButton(this, "Setup Wizard — Permissions")
-        wizardBtn.setOnClickListener {
-            startActivity(Intent(this, SetupWizardActivity::class.java))
-        }
-        root.addView(wizardBtn)
-
-        val logsBtn = UiKit.secondaryButton(this, "Logs / Console")
-        logsBtn.setOnClickListener {
-            startActivity(Intent(this, LogsActivity::class.java))
-        }
-        root.addView(logsBtn)
-
-        val serviceBtn = UiKit.secondaryButton(this, "Care Service chalu karo")
-        serviceBtn.setOnClickListener {
-            CareService.start(this)
-            toast("Care Service chalu ho gaya — triggers live hain")
-        }
-        root.addView(serviceBtn)
-
-        groupListView.setOnItemClickListener { _, _, position, _ ->
-            val g = groups[position]
-            startActivity(
-                Intent(this, AppPickerActivity::class.java)
-                    .putExtra(AppPickerActivity.EXTRA_MODE, "group")
-                    .putExtra(AppPickerActivity.EXTRA_GROUP, g.name)
-            )
-        }
-        groupListView.setOnItemLongClickListener { _, _, position, _ ->
-            val g = groups[position]
-            AlertDialog.Builder(this)
-                .setTitle("Group delete karein?")
-                .setMessage("'${g.name}' group delete ho jayega.")
-                .setPositiveButton("Delete") { _, _ ->
-                    GroupStore.removeGroup(this, g.name)
-                    refreshGroups()
-                }
-                .setNegativeButton("Cancel", null)
-                .show()
-            true
-        }
-
-        setContentView(root)
+        UiKit.tabScreen(this, root, UiKit.TAB_HOME)
         refreshGroups()
         refreshStatus()
-        // App khulte hi engine zinda kar do (idempotent)
+        refreshService()
+        // Start the engine as soon as the app opens (idempotent)
         CareService.start(this)
     }
 
@@ -164,47 +104,109 @@ class MainActivity : Activity() {
         super.onResume()
         refreshGroups()
         refreshStatus()
+        refreshService()
+        // The service starts asynchronously — re-check its status
+        // a moment later so the first paint doesn't claim "stopped"
+        statusView.postDelayed({ refreshService() }, 900)
     }
 
     private fun refreshStatus() {
         val count = WorkflowEngine.loadPack(this).size
-        statusView.text = "Workflows: kul $count load hue (pack + aapke banaye hue)"
+        statusView.text = "Workflows: $count loaded in total (pack + your own)"
     }
 
+    private fun refreshService() {
+        serviceView.text = if (CareService.isRunning) {
+            "✅ Care Service is RUNNING — triggers are live."
+        } else {
+            "❌ Care Service is not running yet — tap Start (it also " +
+                "starts by itself when the app opens)."
+        }
+    }
+
+    /**
+     * Rows are rebuilt from scratch on every refresh — plain views
+     * in a wrap-content card, correct with 0 groups (card hidden,
+     * hint shown) and with many groups (card grows, page scrolls).
+     */
     private fun refreshGroups() {
-        groups = GroupStore.loadGroups(this)
+        val groups = GroupStore.loadGroups(this)
+        groupsCard.removeAllViews()
         if (groups.isEmpty()) {
-            // 0.2.6: khaali card gayab — sirf hint line (upar banayi gayi)
-            listCard.visibility = android.view.View.GONE
-            groupsHint.visibility = android.view.View.VISIBLE
-            groupListView.adapter = null
+            groupsCard.visibility = View.GONE
+            groupsHint.visibility = View.VISIBLE
             return
         }
-        listCard.visibility = android.view.View.VISIBLE
-        groupsHint.visibility = android.view.View.GONE
-        val labels = groups.map { g ->
-            if (g.packages.isEmpty()) "${g.name}  •  0 apps"
-            else "${g.name}  •  ${g.packages.size} apps"
+        groupsCard.visibility = View.VISIBLE
+        groupsHint.visibility = View.GONE
+        for ((index, g) in groups.withIndex()) {
+            if (index > 0) {
+                groupsCard.addView(View(this).apply {
+                    setBackgroundColor(UiKit.BORDER)
+                    layoutParams = LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, UiKit.dp(this@MainActivity, 1)
+                    ).apply {
+                        topMargin = UiKit.dp(this@MainActivity, 8)
+                        bottomMargin = UiKit.dp(this@MainActivity, 8)
+                    }
+                })
+            }
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+                setPadding(0, UiKit.dp(this@MainActivity, 4), 0, UiKit.dp(this@MainActivity, 4))
+                isClickable = true
+            }
+            row.addView(UiKit.body(this, g.name, 16f).apply {
+                typeface = android.graphics.Typeface.DEFAULT_BOLD
+            })
+            row.addView(
+                UiKit.small(
+                    this,
+                    if (g.packages.isEmpty()) "0 apps — tap to add apps"
+                    else "${g.packages.size} apps — tap to manage"
+                )
+            )
+            row.setOnClickListener {
+                startActivity(
+                    Intent(this, AppPickerActivity::class.java)
+                        .putExtra(AppPickerActivity.EXTRA_MODE, "group")
+                        .putExtra(AppPickerActivity.EXTRA_GROUP, g.name)
+                )
+            }
+            row.setOnLongClickListener {
+                AlertDialog.Builder(this)
+                    .setTitle("Delete this group?")
+                    .setMessage("The '${g.name}' group will be deleted.")
+                    .setPositiveButton("Delete") { _, _ ->
+                        GroupStore.removeGroup(this, g.name)
+                        refreshGroups()
+                    }
+                    .setNegativeButton("Cancel", null)
+                    .show()
+                true
+            }
+            groupsCard.addView(row)
         }
-        groupListView.adapter = ArrayAdapter(
-            this, android.R.layout.simple_list_item_1, labels
-        )
     }
 
     private fun showAddGroupDialog() {
         val input = EditText(this).apply {
-            hint = "Group ka naam — jaise Padhai"
+            hint = "Group name — e.g. Padhai"
         }
         AlertDialog.Builder(this)
-            .setTitle("Naya App Group")
+            .setTitle("New App Group")
             .setView(input)
-            .setPositiveButton("Banao") { _, _ ->
+            .setPositiveButton("Create") { _, _ ->
                 val name = input.text.toString()
                 if (GroupStore.addGroup(this, name)) {
-                    toast("Group ban gaya: $name")
+                    toast("Group created: $name")
                     refreshGroups()
                 } else {
-                    toast("Naam khali hai ya group pehle se hai")
+                    toast("Name is empty, or a group with this name already exists")
                 }
             }
             .setNegativeButton("Cancel", null)

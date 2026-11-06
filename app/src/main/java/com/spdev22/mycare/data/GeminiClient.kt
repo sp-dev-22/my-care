@@ -47,7 +47,7 @@ object GeminiClient {
         "continuous_use_over", "time", "interval", "battery_level",
         "screenshot_taken", "contact_saved", "app_installed",
         "cache_over", "unused_apps", "failed_unlock",
-        "notification_posted"
+        "notification_posted", "app_group_used"
     )
 
     // AI ke liye khule button actions (engine ke implemented set ka
@@ -77,6 +77,10 @@ object GeminiClient {
         // se sambhalta hai (packages = comma-wali package list,
         // keyword = ek shabd/vakyaansh)
         "notification_posted" -> setOf("packages", "keyword")
+        // 0.2.8: app_group_used — "group" is a STRING param (the App
+        // Group's name, handled specially in the validate loop like
+        // packages/keyword); "minutes" is numeric.
+        "app_group_used" -> setOf("group", "minutes")
         else -> emptySet()
     }
 
@@ -118,8 +122,8 @@ object GeminiClient {
         val cleanModel = model.trim()
         if (!MODEL_RE.matches(cleanModel)) {
             return Result.Failure(
-                "Model ka naam sahi nahi lag raha, Boss. Settings me " +
-                    "Gemini model check kar lein (jaise gemini-2.0-flash)."
+                "The model name does not look right, Boss. Please check " +
+                    "the Gemini model in Settings (e.g. gemini-2.0-flash)."
             )
         }
         val prompt = buildPrompt(description.trim())
@@ -129,15 +133,15 @@ object GeminiClient {
             return Result.Failure(e.userMessage)
         } catch (e: Exception) {
             return Result.Failure(
-                "Network problem, Boss — Gemini tak baat nahi pahunchi " +
+                "Network problem, Boss — the request did not reach Gemini " +
                     "(${e.message?.take(100) ?: "unknown error"}). " +
-                    "Internet check karke dobara koshish karein."
+                    "Check your internet and try again."
             )
         }
         val rawJson = extractJsonObject(responseText)
             ?: return Result.Failure(
-                "Gemini ne sahi format me jawab nahi diya, Boss. " +
-                    "Thoda aur saaf shabdon me apni baat likhkar dobara koshish karein."
+                "Gemini did not reply in the right format, Boss. " +
+                    "Describe it a little more clearly and try again."
             )
         return validateAndClean(rawJson, existingIds)
     }
@@ -185,9 +189,9 @@ object GeminiClient {
                     ""
                 }
                 throw GeminiHttpException(
-                    "Gemini ne jawab nahi diya (HTTP $code)" +
+                    "Gemini did not answer (HTTP $code)" +
                         (if (serverMsg.isNotEmpty()) ": $serverMsg" else "") +
-                        ". API key aur model Settings me check kar lein, Boss."
+                        ". Please check the API key and model in Settings, Boss."
                 )
             }
             // candidates[0].content.parts[*].text jodo
@@ -203,7 +207,7 @@ object GeminiClient {
             }
             if (sb.isEmpty()) {
                 throw GeminiHttpException(
-                    "Gemini se khaali jawab aaya, Boss. Dobara koshish karein."
+                    "Gemini returned an empty answer, Boss. Please try again."
                 )
             }
             return sb.toString()
@@ -230,11 +234,12 @@ OUTPUT RULE (STRICT): Reply with ONLY one JSON object. No markdown fences, no ex
 === 1. JSON SHAPE (exactly these fields) ===
 {"id":"snake_case_english","name":"Short Name","enabled":true,"bot_type":"notification","trigger":{"type":"..."},"message":{"title":"...","text":"..."},"buttons":[{"label":"...","action":"...","args":{}}],"steps":[],"settings":{}}
 - "id": short snake_case English suggestion (lowercase letters, digits, underscores). The app automatically adds an "ai_" prefix and makes it unique — do not add prefixes yourself.
-- "name": short human name for the workflow (max 60 characters). May be English or Hinglish.
+- "name": short human name for the workflow (max 60 characters). ENGLISH ONLY.
 - "enabled": always true.
-- "steps": always []. NEVER add a top-level "action" field.
+- "steps": always [].
+- OPTIONAL top-level "action": a DIRECT action that runs IMMEDIATELY when the workflow fires (the notification is still posted as the record). Shape: {"type":"set_brightness","percent":25} or {"type":"set_volume","percent":25}. ONLY these two types, percent 0-100 REQUIRED. Use it when the user wants the thing DONE automatically (e.g. "dim the screen at 6 pm", "set volume to 25% when a music app opens") instead of just being asked. Omit the field otherwise.
 
-=== 2. TRIGGERS (use ONLY these 14 types; copy names exactly) ===
+=== 2. TRIGGERS (use ONLY these 15 types; copy names exactly) ===
 1. "time" — fires daily at a fixed time. Params: {"time":"HH:MM"} 24-hour, REQUIRED (e.g. "08:00", "22:30").
 2. "interval" — fires every N hours. Params: {"hours": number 1-24}. (The app stays quiet between 23:00 and 07:00 for interval workflows.)
 3. "battery_level" — Params: {"level": number 1-100 (REQUIRED), "state": "charging" or "discharging"}. With "charging": fires once when charge reaches the level (use for full-charge alerts, e.g. level 95). With "discharging": fires when battery drops to the level (use for low-battery warnings, e.g. level 20). Variable: {percent}.
@@ -247,8 +252,10 @@ OUTPUT RULE (STRICT): Reply with ONLY one JSON object. No markdown fences, no ex
 10. "app_installed" — a new app is installed. No params.
 11. "cache_over" — some app's cache grows too big. NO trigger params; the limit goes in settings: {"cache_mb": number 10-5000}. Variables: {app}, {cache} (e.g. "512 MB"). Note: for this trigger the app shows its own fixed notification with an App Info button — keep your buttons minimal (one skip button is enough).
 12. "unused_apps" — apps not used for many days. NO trigger params; the limit goes in settings: {"days": number 1-365}. Variables: {app}, {count} (how many such apps).
-13. "failed_unlock" — 2 wrong unlock attempts within 10 minutes (possible intruder). No params.
+13. "failed_unlock" — wrong unlock attempts reach the user's threshold (default 2) within 10 minutes (possible intruder). No params. The app also captures a front-camera photo for the alert when it can.
 14. "notification_posted" — a notification arrives from another app. Params (both optional strings): {"packages": "com.whatsapp,com.google.android.gm", "keyword": "OTP"}. "packages" = comma-separated Android package names; only those apps' notifications fire it (omit = all apps). "keyword" = a word that must appear in the notification title/text, case-insensitive (omit = any notification from those apps). Variables: {app} (sending app's name), {text} (the notification's title). NOTE: this trigger needs the user to grant "Notification Access" in the app's Setup Wizard — still generate it when the user asks for notification-based workflows.
+
+15. "app_group_used" — an app from a named App Group is used. Params: {"group":"Music"} REQUIRED (the group's exact name — the user creates groups in the app; if the group does not exist yet, the workflow simply never fires until he creates it), {"minutes": number 0-720} OPTIONAL (0 or omitted = fire as soon as the app opens; N = after N minutes of use). Variables: {app}, {minutes}. PERFECT partner for a direct action, e.g. group "Music" + action set_volume 25.
 
 For triggers NOT listed with params above, the trigger object contains ONLY "type". Never invent param names.
 
@@ -263,7 +270,7 @@ Every button: {"label":"short label (max 30 chars)","action":"...","args":{...}}
 - "open_clock" — opens the user's Clock app so he can set an alarm himself. No args. (There is NO automatic alarm-setting action — never try to set alarms.)
 - "set_volume" — sets the MEDIA (music/video) volume. args: {"percent": number 0-100} REQUIRED. Example: 25 = quiet and safe for ears, 50 = half, 0 = silent.
 - "set_brightness" — sets screen brightness. args: {"percent": number 0-100} REQUIRED. Example: 20 = dim for night, 70 = bright for outdoors. (Needs a system permission the user grants in the Setup Wizard; if not granted, the app politely tells the user — the button is still correct to generate.)
-- "skip" — dismisses the notification, does nothing else. No args. Almost every workflow should end with ONE skip button (label ideas: "Skip", "Thik hai", "Baad me").
+- "skip" — dismisses the notification, does nothing else. No args. Almost every workflow should end with ONE skip button (label ideas: "Skip", "OK", "Later").
 
 FORBIDDEN (do NOT use — the app rejects them): set_alarm, set_reminder, input_text, jump, delete_file, assign_group, kill_app, or any other name you invent.
 
@@ -280,23 +287,29 @@ FORBIDDEN (do NOT use — the app rejects them): set_alarm, set_reminder, input_
 === 6. VARIABLES (only inside message.title / message.text) ===
 Use ONLY the variables listed for that trigger in section 2: {app}, {minutes}, {percent}, {cache}, {text}, {name}, {count}. Write them exactly like {app}. Any other {placeholder} (e.g. {group}, {time}, {date}) is NOT supported and would be shown literally — never use them.
 
-=== 7. VOICE (message.title / message.text) ===
-- Language: Hinglish — Roman Hindi mixed with common English words (like: "Boss, aapne {app} bahut der chala liya").
-- Tone: respectful "aap", caring like a friend/family member. Address the user as "Boss" in the text (usually at the start or end).
-- Friendly scolding is welcome for study/health habits (e.g. "aise chalega to exam kaise clear hoga?"), never abusive, never frightening.
+=== 7. VOICE (name / message.title / message.text / button labels) ===
+- LANGUAGE: ENGLISH ONLY — every user-facing string you produce (name, title, text, button labels) must be in English, even when the user described the workflow in Hindi or Hinglish. (The app and all its workflows are English now.)
+- Tone: respectful and caring, like a friend/family member. Address the user as "Boss" in the text (usually at the start or end).
+- Friendly scolding is welcome for study/health habits (e.g. "at this rate, how will the exam get cleared?"), never abusive, never frightening.
 - Title: ONE short line (max 80 chars). Text: 1-2 short lines (max 400 chars). Emojis: at most 1-2, only if natural.
 - The title/text must make sense with the trigger and use its variables where natural.
+
+=== 7b. PERMISSION MAP (the app checks these itself — you only need the right shape) ===
+The app automatically works out which permissions a workflow needs from its trigger and actions, and asks the user for the missing ones the moment the workflow is switched ON — you never write permissions into the JSON. For your awareness: usage triggers (app_hopping, single_app_over, continuous_use_over, app_group_used, cache_over, unused_apps) need Usage Access; screenshot_taken needs Photos/Media; notification_posted needs Notification Access; failed_unlock needs Device Admin + Camera; contact_saved needs Contacts; time needs Exact Alarms; set_brightness needs the system-settings grant; go_home needs Accessibility; lock_phone needs Device Admin; popup needs Display-over-apps. So: generate the workflow the user asked for — the app handles the permission side.
 
 === 8. EXAMPLES (follow this quality and shape) ===
 
 Example A — daily time reminder:
-{"id":"night_water_reminder","name":"Raat Paani Reminder","enabled":true,"bot_type":"notification","trigger":{"type":"time","time":"22:00"},"message":{"title":"Paani pi lo, Boss 💧","text":"Sone se pehle ek glass paani pi lijiye, Boss. Sehat bani rahegi aur neend bhi achhi aayegi."},"buttons":[{"label":"Pi liya","action":"skip"}],"steps":[],"settings":{}}
+{"id":"night_water_reminder","name":"Night Water Reminder","enabled":true,"bot_type":"notification","trigger":{"type":"time","time":"22:00"},"message":{"title":"Drink some water, Boss 💧","text":"Have a glass of water before sleeping, Boss. It keeps you healthy and helps you sleep better."},"buttons":[{"label":"Done","action":"skip"}],"steps":[],"settings":{}}
 
 Example B — usage limit with friendly scolding:
-{"id":"long_app_daant","name":"Zyada App Chalane par Daant","enabled":true,"bot_type":"notification","trigger":{"type":"single_app_over","minutes":45},"message":{"title":"Bas karo, Boss ⚠️","text":"Aap {app} pichhle {minutes} minute se chala rahe hain. Padhai ka time kharab ho raha hai — thoda break lijiye, warna exam kaise clear hoga?"},"buttons":[{"label":"Home jao","action":"go_home"},{"label":"Phone lock karo","action":"lock_phone"},{"label":"Skip","action":"skip"}],"steps":[],"settings":{"minutes":45}}
+{"id":"long_app_scolding","name":"Long App Scolding","enabled":true,"bot_type":"notification","trigger":{"type":"single_app_over","minutes":45},"message":{"title":"That's enough, Boss ⚠️","text":"You have been using {app} for the last {minutes} minutes. Study time is being wasted — take a small break, or how will the exam get cleared?"},"buttons":[{"label":"Go Home","action":"go_home"},{"label":"Lock Phone","action":"lock_phone"},{"label":"Skip","action":"skip"}],"steps":[],"settings":{"minutes":45}}
 
-Example C — music volume safety with set_volume:
-{"id":"music_volume_safety","name":"Music Volume Safety","enabled":true,"bot_type":"notification","trigger":{"type":"single_app_over","minutes":1},"message":{"title":"Volume Alert 🎧","text":"Boss, music app khul gaya hai. Kaanon ki safety ke liye volume 25% kar dun? Tez awaaz lambe samay me kaan kharab karti hai."},"buttons":[{"label":"Volume 25% karo","action":"set_volume","args":{"percent":25}},{"label":"Skip","action":"skip"}],"steps":[],"settings":{"minutes":1}}
+Example C — music volume safety with a set_volume BUTTON (asks first):
+{"id":"music_volume_safety","name":"Music Volume Safety","enabled":true,"bot_type":"notification","trigger":{"type":"single_app_over","minutes":1},"message":{"title":"Volume Alert 🎧","text":"Boss, a music app is open. Shall I set the volume to 25% to keep your ears safe? Loud sound damages ears over time."},"buttons":[{"label":"Set volume 25%","action":"set_volume","args":{"percent":25}},{"label":"Skip","action":"skip"}],"steps":[],"settings":{"minutes":1}}
+
+Example D — DIRECT action (acts immediately, no tap needed):
+{"id":"evening_dim","name":"Evening Dim","enabled":true,"bot_type":"notification","trigger":{"type":"time","time":"18:00"},"message":{"title":"Evening brightness 🌆","text":"It is 6 PM, Boss — screen brightness has been set to 25% automatically to keep your eyes comfortable."},"buttons":[{"label":"OK","action":"skip"}],"steps":[],"settings":{},"action":{"type":"set_brightness","percent":25}}
 
 === 9. USER'S REQUEST ===
 "$description"
@@ -328,12 +341,12 @@ Example C — music volume safety with set_volume:
     private fun validateAndClean(raw: JSONObject, existingIds: Set<String>): Result {
         // --- trigger ---
         val triggerRaw = raw.optJSONObject("trigger")
-            ?: return Result.Failure("AI ke jawab me trigger hi nahi mila, Boss. Dobara koshish karein.")
+            ?: return Result.Failure("No trigger was found in the AI's answer, Boss. Please try again.")
         val type = triggerRaw.optString("type").trim()
         if (type !in TRIGGER_TYPES) {
             return Result.Failure(
-                "AI ne aisa trigger chuna jo My Care chala nahi sakta ('$type'). " +
-                    "Apni baat thoda badalkar dobara koshish karein, Boss."
+                "The AI chose a trigger that My Care cannot run ('$type'). " +
+                    "Describe it a little differently and try again, Boss."
             )
         }
         val trigger = JSONObject().put("type", type)
@@ -343,8 +356,8 @@ Example C — music volume safety with set_volume:
                     val tv = triggerRaw.optString("time").trim()
                     if (!TIME_RE.matches(tv)) {
                         return Result.Failure(
-                            "AI ne samay sahi format (HH:MM, jaise 22:00) me " +
-                                "nahi diya, Boss. Dobara koshish karein."
+                            "The AI did not give the time in the right format " +
+                                "(HH:MM, e.g. 22:00), Boss. Please try again."
                         )
                     }
                     trigger.put("time", tv)
@@ -369,6 +382,20 @@ Example C — music volume safety with set_volume:
                         trigger.put("packages", pkgs.joinToString(","))
                     }
                 }
+                "group" -> {
+                    // app_group_used: the App Group's NAME (string).
+                    // Required — without a group the trigger can
+                    // never match anything.
+                    val gname = triggerRaw.optString("group").trim().take(40)
+                    if (gname.isEmpty()) {
+                        return Result.Failure(
+                            "The AI did not name an App Group for the " +
+                                "group trigger, Boss. Mention the group " +
+                                "name (e.g. Music) and try again."
+                        )
+                    }
+                    trigger.put("group", gname)
+                }
                 "keyword" -> {
                     // notification_posted: ek shabd/vakyaansh; bahut
                     // lamba ya khaali ho to key hi gira do (bina
@@ -386,7 +413,7 @@ Example C — music volume safety with set_volume:
         }
         if (type == "battery_level" && !trigger.has("level")) {
             return Result.Failure(
-                "AI ne battery level nahi diya, Boss. Dobara koshish karein."
+                "The AI did not give a battery level, Boss. Please try again."
             )
         }
 
@@ -394,7 +421,7 @@ Example C — music volume safety with set_volume:
         val msgRaw = raw.optJSONObject("message")
         val text = (msgRaw?.optString("text") ?: "").trim().take(400)
         if (text.isEmpty()) {
-            return Result.Failure("AI ke jawab me message ka text khaali tha, Boss. Dobara koshish karein.")
+            return Result.Failure("The message text in the AI's answer was empty, Boss. Please try again.")
         }
         val name = raw.optString("name").trim().take(60)
             .ifEmpty { "AI Workflow" }
@@ -427,6 +454,21 @@ Example C — music volume safety with set_volume:
             }
         }
 
+        // --- 0.2.8: optional top-level DIRECT action ---
+        // {"type":"set_brightness"|"set_volume","percent":0-100} —
+        // runs immediately when the workflow fires. Anything else
+        // (set_alarm and friends) is dropped, never trusted.
+        val actionOut: JSONObject? = run {
+            val aRaw = raw.optJSONObject("action") ?: return@run null
+            val aType = aRaw.optString("type").trim()
+            if (aType != "set_brightness" && aType != "set_volume") return@run null
+            val pct = numeric(aRaw.opt("percent")) ?: numeric(aRaw.opt("value"))
+                ?: return@run null
+            JSONObject()
+                .put("type", aType)
+                .put("percent", pct.coerceIn(0, 100))
+        }
+
         // --- id: surakshit + unique, "ai_" shuruaat ke saath ---
         val id = uniqueId(raw.optString("id"), name, existingIds)
 
@@ -440,6 +482,7 @@ Example C — music volume safety with set_volume:
             .put("buttons", buttons)
             .put("steps", JSONArray())
             .put("settings", settings)
+        if (actionOut != null) out.put("action", actionOut)
         return Result.Success(out, name)
     }
 

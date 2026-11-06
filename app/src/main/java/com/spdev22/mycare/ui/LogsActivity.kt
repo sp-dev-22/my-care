@@ -29,8 +29,8 @@ class LogsActivity : Activity() {
         root.addView(
             UiKit.subtitle(
                 this,
-                "My Care ke saare kaam yahan record hote hain — " +
-                    "workflow fire, button actions, errors."
+                "Everything My Care does is recorded here — " +
+                    "workflow fires, button actions, errors."
             )
         )
 
@@ -62,12 +62,12 @@ class LogsActivity : Activity() {
         refreshBtn.setOnClickListener { refresh() }
         root.addView(refreshBtn)
 
-        val clearBtn = UiKit.secondaryButton(this, "Logs saaf karo")
+        val clearBtn = UiKit.secondaryButton(this, "Clear logs")
         clearBtn.setOnClickListener {
             LogStore.clear(this)
-            LogStore.log(this, "Logs saaf kiye gaye")
+            LogStore.log(this, "Logs cleared")
             refresh()
-            Toast.makeText(this, "Logs saaf ho gaye", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Logs cleared", Toast.LENGTH_SHORT).show()
         }
         root.addView(clearBtn)
 

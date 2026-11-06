@@ -1,1 +1,543 @@
-{"note":"Pack v4 (0.2.5) — saare 16 workflows LIVE. 0.2.5 ke badlav: Alarm Suggestion ab set_alarm ki jagah Clock app KHOLTA hai (open_clock) — user-directive, XOS par programmatic alarm kaam nahi karta tha; Screenshot detection folder-watch par hai (MediaStore observer hata).","pack":"my-care-pack","version":4,"workflows":[{"bot_type":"notification","buttons":[],"enabled":true,"id":"welcome_boss","message":{"text":"Good morning, Boss! My Care aaj bhi aapke saath hai — padhai, araam aur phone ki health, teeno ka khayal rakhenge. Din shubh ho!","title":"Welcome Boss! 👋"},"name":"Welcome Boss","settings":{},"steps":[],"trigger":{"type":"first_unlock"}},{"bot_type":"popup","buttons":[{"action":"open_app","args":{"kind":"music","packages":"com.google.android.apps.youtube.music,com.google.android.music","slot":"music"},"label":"Music"},{"action":"open_app","args":{"package":"com.google.android.youtube","slot":"video"},"label":"Videos / YouTube"},{"action":"open_app","args":{"package":"com.whatsapp","slot":"chat"},"label":"Muse AI / WhatsApp"},{"action":"lock_phone","label":"Lock Phone"}],"enabled":true,"id":"boredom_dost","message":{"text":"Apps khol-bund, khol-bund — kuch samajh nahi aa raha kya karein? Kuch accha karte hain:","title":"Bore ho rahe ho, Boss?"},"name":"Boredom Dost","settings":{"cooldown_minutes":45},"steps":[],"trigger":{"apps":3,"seconds":10,"type":"app_hopping","window_minutes":5}},{"bot_type":"notification","buttons":[{"action":"lock_phone","label":"Lock Phone"},{"action":"go_home","label":"Close App"},{"action":"skip","label":"Skip Now!"}],"enabled":true,"id":"rest_nudge","message":{"text":"Aap lagatar {minutes} minutes se phone chala rahe hain. Aankhon ko 2 minute ka break dijiye — padhai bhi fresh dimaag se hoti hai.","title":"Thoda araam kijiye, Boss"},"name":"Rest Nudge","settings":{"minutes":25},"steps":[],"trigger":{"minutes":25,"type":"continuous_use_over"}},{"bot_type":"notification","buttons":[{"action":"go_home","label":"Close App"},{"action":"lock_phone","label":"Lock Phone"},{"action":"skip","label":"Skip Now!"}],"enabled":true,"id":"long_app_suggestion","message":{"text":"Aap {minutes} minutes se {app} chala rahe hain. Aap padh rahe ho... nahi... to fail ho jaoge! Agar yeh padhai nahi hai to thoda break le lijiye.","title":"Ek suggestion hai, Boss"},"name":"Long-App Suggestion","settings":{"minutes":30},"steps":[],"trigger":{"minutes":30,"type":"single_app_over"}},{"bot_type":"notification","buttons":[],"enabled":true,"id":"study_suggestion","message":{"text":"Good morning! Aaj ki padhai shuru karte hain. Ek chhota sa target rakhiye, phone ko side me rakhiye — My Care nazar rakhega.","title":"Padhai ka time, Boss 📚"},"name":"Study Suggestion","settings":{},"steps":[],"trigger":{"settings_key":"study_time","time":"08:00","type":"time"}},{"bot_type":"notification","buttons":[{"action":"open_clock","label":"Clock kholo"},{"action":"skip","label":"Skip"}],"enabled":true,"id":"alarm_suggestion","message":{"title":"Alarm set kar lein, Boss? ⏰","text":"Soone ka samay ho gaya. Alarm chahiye to 'Clock kholo' dabaiye — aapka Clock app khul jayega, wahan se apne samay ka alarm set kar dijiye."},"name":"Alarm Suggestion","settings":{},"steps":[],"trigger":{"settings_key":"alarm_time","time":"20:00","type":"time"}},{"bot_type":"notification","buttons":[{"action":"skip","label":"Theek hai"}],"enabled":true,"id":"aaj_ka_hisaab","message":{"text":"{hisaab}","title":"Aaj ka Hisaab 📊"},"name":"Aaj Ka Hisaab","settings":{},"steps":[],"trigger":{"settings_key":"hisaab_time","time":"19:45","type":"time"}},{"bot_type":"notification","buttons":[{"action":"skip","label":"Pee liya 👍"},{"action":"skip","label":"Skip"}],"enabled":true,"id":"paani_reminder","message":{"text":"Kaafi der ho gayi — ek glass paani pee lijiye. Padhai ke beech hydration se dhyaan bana rehta hai.","title":"Paani pee lijiye, Boss 💧"},"name":"Paani Reminder","settings":{"hours":2},"steps":[],"trigger":{"hours":2,"type":"interval"}},{"action":{"after_minutes":1,"title":"⚠️ Phone Full Charged!","type":"set_alarm"},"bot_type":"notification","buttons":[],"enabled":true,"id":"battery_full_alarm","message":{"text":"Battery {percent}% ho gayi hai, charger hata dijiye. 1 minute me alarm-style reminder bhi aa jayega.","title":"⚠️ Phone Full Charged!"},"name":"Battery Full Alarm","settings":{"after_minutes":1,"level":95},"steps":[],"trigger":{"level":95,"state":"charging","type":"battery_level"}},{"bot_type":"notification","buttons":[{"action":"skip","label":"Theek hai"}],"enabled":true,"id":"battery_low_warning","message":{"text":"Battery sirf {percent}% bachi hai. Charger laga dijiye — padhai ke beech phone band na ho jaye.","title":"Battery low hai, Boss 🔋"},"name":"Battery Low Warning","settings":{"level":20},"steps":[],"trigger":{"level":20,"state":"discharging","type":"battery_level"}},{"bot_type":"notification","buttons":[{"action":"skip","label":"Save / Don't Touch"},{"action":"jump","label":"Delete","next":"ask_delete_time"},{"action":"skip","label":"Skip"}],"enabled":true,"id":"screenshot_safai","message":{"text":"Is screenshot ka kya karein, Boss?","title":"Screenshot liya gaya"},"name":"Screenshot Safai","settings":{},"steps":[{"buttons":[{"action":"delete_file","args":{"after":"5m"},"label":"5 minutes"},{"action":"delete_file","args":{"after":"1h"},"label":"1 hour"},{"action":"delete_file","args":{"after":"1d"},"label":"1 day"}],"id":"ask_delete_time","message":{"text":"Auto-delete ka time chunein. Note: Android delete se pehle kabhi-kabhi system confirmation maang sakta hai — woh notification aa jayegi.","title":"Kab delete karun?"}}],"trigger":{"type":"screenshot_taken"}},{"bot_type":"notification","buttons":[{"action":"open_app","args":{"package":"com.whatsapp","slot":"chat"},"label":"WhatsApp kholo"},{"action":"skip","label":"Skip"}],"enabled":true,"id":"contact_whatsapp","message":{"text":"{name} phone me jud gaya hai. WhatsApp par baat shuru karein?","title":"Naya contact save hua 👤"},"name":"Contact → WhatsApp","settings":{},"steps":[],"trigger":{"type":"contact_saved"}},{"bot_type":"popup","buttons":[],"enabled":true,"id":"naya_app_group","message":{"text":"Naya app kis group me rakhein? Notification par tap karke popup se group chunein.","title":"Naya app install hua 📲"},"name":"Naya App → Group","settings":{},"steps":[],"trigger":{"type":"app_installed"}},{"bot_type":"notification","buttons":[{"action":"open_app_info","label":"App Info kholo"},{"action":"skip","label":"Skip"}],"enabled":true,"id":"cache_safai","message":{"text":"{app} ka cache {cache} ho gaya hai, Boss. App Info kholkar 'Clear cache' kar dijiye — phone halka rahega.","title":"Cache bada ho gaya hai 🧹"},"name":"Cache Safai","settings":{"cache_mb":500},"steps":[],"trigger":{"type":"cache_over"}},{"bot_type":"notification","buttons":[{"action":"lock_phone","label":"Lock Phone"},{"action":"skip","label":"Main hi tha / Ignore"}],"enabled":true,"id":"ghuspaithiya_alert","message":{"text":"Boss, koi aapka phone kholne ki koshish kar raha hai? 2 baar galat password pada hai. Agar yeh aap nahi the to phone apne paas rakhiye.","title":"Ghuspaithiya Alert! 🚨"},"name":"Ghuspaithiya Alert","settings":{},"steps":[],"trigger":{"type":"failed_unlock"}},{"bot_type":"notification","buttons":[{"action":"open_app_info","label":"App Info kholo"},{"action":"skip","label":"Skip"}],"enabled":true,"id":"unused_apps_safai","message":{"text":"{app} 30 din se zyada se nahi chala hai, Boss (aise kul {count} apps hain). Zarurat na ho to uninstall karke jagah bana dijiye.","title":"Purane apps ki safai 🗑️"},"name":"Unused Apps Safai","settings":{"days":30},"steps":[],"trigger":{"type":"unused_apps"}}]}
+{
+ "note": "Pack v5 (0.2.8) — all 19 workflows LIVE, all text in English. 0.2.8 additions: Evening Brightness (time 18:00 -> direct set_brightness 25), Music Volume Guard (app_group_used 'Music' -> direct set_volume 25; never fires until a 'Music' group exists), Notification Watcher sample (notification_posted, OFF by default). Intruder Alert now also captures a front-camera photo (threshold in Settings, default 2).",
+ "pack": "my-care-pack",
+ "version": 5,
+ "workflows": [
+  {
+   "bot_type": "notification",
+   "buttons": [],
+   "enabled": true,
+   "id": "welcome_boss",
+   "message": {
+    "text": "Good morning, Boss! My Care is with you again today — together we will take care of your studies, your rest and your phone's health. Have a great day!",
+    "title": "Welcome Boss! 👋"
+   },
+   "name": "Welcome Boss",
+   "settings": {},
+   "steps": [],
+   "trigger": {
+    "type": "first_unlock"
+   }
+  },
+  {
+   "bot_type": "popup",
+   "buttons": [
+    {
+     "action": "open_app",
+     "args": {
+      "kind": "music",
+      "packages": "com.google.android.apps.youtube.music,com.google.android.music",
+      "slot": "music"
+     },
+     "label": "Music"
+    },
+    {
+     "action": "open_app",
+     "args": {
+      "package": "com.google.android.youtube",
+      "slot": "video"
+     },
+     "label": "Videos / YouTube"
+    },
+    {
+     "action": "open_app",
+     "args": {
+      "package": "com.whatsapp",
+      "slot": "chat"
+     },
+     "label": "Muse AI / WhatsApp"
+    },
+    {
+     "action": "lock_phone",
+     "label": "Lock Phone"
+    }
+   ],
+   "enabled": true,
+   "id": "boredom_dost",
+   "message": {
+    "text": "Opening and closing apps again and again — not sure what to do? Let's do something good:",
+    "title": "Feeling bored, Boss?"
+   },
+   "name": "Boredom Dost",
+   "settings": {
+    "cooldown_minutes": 45
+   },
+   "steps": [],
+   "trigger": {
+    "apps": 3,
+    "seconds": 10,
+    "type": "app_hopping",
+    "window_minutes": 5
+   }
+  },
+  {
+   "bot_type": "notification",
+   "buttons": [
+    {
+     "action": "lock_phone",
+     "label": "Lock Phone"
+    },
+    {
+     "action": "go_home",
+     "label": "Close App"
+    },
+    {
+     "action": "skip",
+     "label": "Skip Now!"
+    }
+   ],
+   "enabled": true,
+   "id": "rest_nudge",
+   "message": {
+    "text": "You have been using your phone continuously for {minutes} minutes. Give your eyes a 2-minute break — studying also works better with a fresh mind.",
+    "title": "Take a little rest, Boss"
+   },
+   "name": "Rest Nudge",
+   "settings": {
+    "minutes": 25
+   },
+   "steps": [],
+   "trigger": {
+    "minutes": 25,
+    "type": "continuous_use_over"
+   }
+  },
+  {
+   "bot_type": "notification",
+   "buttons": [
+    {
+     "action": "go_home",
+     "label": "Close App"
+    },
+    {
+     "action": "lock_phone",
+     "label": "Lock Phone"
+    },
+    {
+     "action": "skip",
+     "label": "Skip Now!"
+    }
+   ],
+   "enabled": true,
+   "id": "long_app_suggestion",
+   "message": {
+    "text": "You have been using {app} for {minutes} minutes. You are studying... no... then you will fail! If this is not study, please take a small break.",
+    "title": "A small suggestion, Boss"
+   },
+   "name": "Long-App Suggestion",
+   "settings": {
+    "minutes": 30
+   },
+   "steps": [],
+   "trigger": {
+    "minutes": 30,
+    "type": "single_app_over"
+   }
+  },
+  {
+   "bot_type": "notification",
+   "buttons": [],
+   "enabled": true,
+   "id": "study_suggestion",
+   "message": {
+    "text": "Good morning! Let's start today's study. Set one small target and keep the phone aside — My Care will keep watch.",
+    "title": "Time to study, Boss 📚"
+   },
+   "name": "Study Suggestion",
+   "settings": {},
+   "steps": [],
+   "trigger": {
+    "settings_key": "study_time",
+    "time": "08:00",
+    "type": "time"
+   }
+  },
+  {
+   "bot_type": "notification",
+   "buttons": [
+    {
+     "action": "open_clock",
+     "label": "Open Clock"
+    },
+    {
+     "action": "skip",
+     "label": "Skip"
+    }
+   ],
+   "enabled": true,
+   "id": "alarm_suggestion",
+   "message": {
+    "text": "It is time to sleep. If you want an alarm, tap 'Open Clock' — your Clock app will open, and you can set the alarm for your time there.",
+    "title": "Shall we set an alarm, Boss? ⏰"
+   },
+   "name": "Alarm Suggestion",
+   "settings": {},
+   "steps": [],
+   "trigger": {
+    "settings_key": "alarm_time",
+    "time": "20:00",
+    "type": "time"
+   }
+  },
+  {
+   "bot_type": "notification",
+   "buttons": [
+    {
+     "action": "skip",
+     "label": "OK"
+    }
+   ],
+   "enabled": true,
+   "id": "aaj_ka_hisaab",
+   "message": {
+    "text": "{hisaab}",
+    "title": "Today's Account 📊"
+   },
+   "name": "Today's Account",
+   "settings": {},
+   "steps": [],
+   "trigger": {
+    "settings_key": "hisaab_time",
+    "time": "19:45",
+    "type": "time"
+   }
+  },
+  {
+   "bot_type": "notification",
+   "buttons": [
+    {
+     "action": "skip",
+     "label": "Drank it 👍"
+    },
+    {
+     "action": "skip",
+     "label": "Skip"
+    }
+   ],
+   "enabled": true,
+   "id": "paani_reminder",
+   "message": {
+    "text": "It's been a while — have a glass of water. Staying hydrated between study sessions keeps your focus strong.",
+    "title": "Drink some water, Boss 💧"
+   },
+   "name": "Water Reminder",
+   "settings": {
+    "hours": 2
+   },
+   "steps": [],
+   "trigger": {
+    "hours": 2,
+    "type": "interval"
+   }
+  },
+  {
+   "action": {
+    "after_minutes": 1,
+    "title": "⚠️ Phone Fully Charged!",
+    "type": "set_alarm"
+   },
+   "bot_type": "notification",
+   "buttons": [],
+   "enabled": true,
+   "id": "battery_full_alarm",
+   "message": {
+    "text": "Battery has reached {percent}%, please unplug the charger. An alarm-style reminder will also arrive in 1 minute.",
+    "title": "⚠️ Phone Fully Charged!"
+   },
+   "name": "Battery Full Alarm",
+   "settings": {
+    "after_minutes": 1,
+    "level": 95
+   },
+   "steps": [],
+   "trigger": {
+    "level": 95,
+    "state": "charging",
+    "type": "battery_level"
+   }
+  },
+  {
+   "bot_type": "notification",
+   "buttons": [
+    {
+     "action": "skip",
+     "label": "OK"
+    }
+   ],
+   "enabled": true,
+   "id": "battery_low_warning",
+   "message": {
+    "text": "Only {percent}% battery is left. Please plug in the charger — the phone should not switch off in the middle of study.",
+    "title": "Battery is low, Boss 🔋"
+   },
+   "name": "Battery Low Warning",
+   "settings": {
+    "level": 20
+   },
+   "steps": [],
+   "trigger": {
+    "level": 20,
+    "state": "discharging",
+    "type": "battery_level"
+   }
+  },
+  {
+   "bot_type": "notification",
+   "buttons": [
+    {
+     "action": "skip",
+     "label": "Save / Don't Touch"
+    },
+    {
+     "action": "jump",
+     "label": "Delete",
+     "next": "ask_delete_time"
+    },
+    {
+     "action": "skip",
+     "label": "Skip"
+    }
+   ],
+   "enabled": true,
+   "id": "screenshot_safai",
+   "message": {
+    "text": "What should be done with this screenshot, Boss?",
+    "title": "Screenshot taken"
+   },
+   "name": "Screenshot Cleanup",
+   "settings": {},
+   "steps": [
+    {
+     "buttons": [
+      {
+       "action": "delete_file",
+       "args": {
+        "after": "5m"
+       },
+       "label": "5 minutes"
+      },
+      {
+       "action": "delete_file",
+       "args": {
+        "after": "1h"
+       },
+       "label": "1 hour"
+      },
+      {
+       "action": "delete_file",
+       "args": {
+        "after": "1d"
+       },
+       "label": "1 day"
+      }
+     ],
+     "id": "ask_delete_time",
+     "message": {
+      "text": "Choose the auto-delete time. Note: Android may sometimes ask for a system confirmation before deleting — that notification will arrive.",
+      "title": "When should I delete it?"
+     }
+    }
+   ],
+   "trigger": {
+    "type": "screenshot_taken"
+   }
+  },
+  {
+   "bot_type": "notification",
+   "buttons": [
+    {
+     "action": "open_app",
+     "args": {
+      "package": "com.whatsapp",
+      "slot": "chat"
+     },
+     "label": "Open WhatsApp"
+    },
+    {
+     "action": "skip",
+     "label": "Skip"
+    }
+   ],
+   "enabled": true,
+   "id": "contact_whatsapp",
+   "message": {
+    "text": "{name} has been added to your phone. Start a chat on WhatsApp?",
+    "title": "New contact saved 👤"
+   },
+   "name": "Contact → WhatsApp",
+   "settings": {},
+   "steps": [],
+   "trigger": {
+    "type": "contact_saved"
+   }
+  },
+  {
+   "bot_type": "popup",
+   "buttons": [],
+   "enabled": true,
+   "id": "naya_app_group",
+   "message": {
+    "text": "Which group should the new app go into? Tap the notification and choose a group in the popup.",
+    "title": "New app installed 📲"
+   },
+   "name": "New App → Group",
+   "settings": {},
+   "steps": [],
+   "trigger": {
+    "type": "app_installed"
+   }
+  },
+  {
+   "bot_type": "notification",
+   "buttons": [
+    {
+     "action": "open_app_info",
+     "label": "Open App Info"
+    },
+    {
+     "action": "skip",
+     "label": "Skip"
+    }
+   ],
+   "enabled": true,
+   "id": "cache_safai",
+   "message": {
+    "text": "{app}'s cache has reached {cache}, Boss. Open App Info and tap 'Clear cache' — the phone will stay light.",
+    "title": "Cache has grown big 🧹"
+   },
+   "name": "Cache Cleanup",
+   "settings": {
+    "cache_mb": 500
+   },
+   "steps": [],
+   "trigger": {
+    "type": "cache_over"
+   }
+  },
+  {
+   "bot_type": "notification",
+   "buttons": [
+    {
+     "action": "lock_phone",
+     "label": "Lock Phone"
+    },
+    {
+     "action": "skip",
+     "label": "It was me / Ignore"
+    }
+   ],
+   "enabled": true,
+   "id": "ghuspaithiya_alert",
+   "message": {
+    "text": "Boss, is someone trying to open your phone? The wrong password was entered repeatedly. If it wasn't you, keep the phone with you. My Care also tries to capture a photo of the person — see System → Running Services → View captures.",
+    "title": "Intruder Alert! 🚨"
+   },
+   "name": "Intruder Alert",
+   "settings": {},
+   "steps": [],
+   "trigger": {
+    "type": "failed_unlock"
+   }
+  },
+  {
+   "bot_type": "notification",
+   "buttons": [
+    {
+     "action": "open_app_info",
+     "label": "Open App Info"
+    },
+    {
+     "action": "skip",
+     "label": "Skip"
+    }
+   ],
+   "enabled": true,
+   "id": "unused_apps_safai",
+   "message": {
+    "text": "{app} has not been opened for more than 30 days, Boss (there are {count} such apps in total). If you don't need it, uninstall it and free up space.",
+    "title": "Cleaning up old apps 🗑️"
+   },
+   "name": "Unused Apps Cleanup",
+   "settings": {
+    "days": 30
+   },
+   "steps": [],
+   "trigger": {
+    "type": "unused_apps"
+   }
+  },
+  {
+   "action": {
+    "percent": 25,
+    "type": "set_brightness"
+   },
+   "bot_type": "notification",
+   "buttons": [
+    {
+     "action": "skip",
+     "label": "OK"
+    }
+   ],
+   "enabled": true,
+   "id": "evening_brightness",
+   "message": {
+    "text": "It's 6 PM, Boss — screen brightness has been set to 25% automatically, so your eyes stay comfortable for the evening.",
+    "title": "Evening brightness 🌆"
+   },
+   "name": "Evening Brightness",
+   "settings": {},
+   "steps": [],
+   "trigger": {
+    "time": "18:00",
+    "type": "time"
+   }
+  },
+  {
+   "action": {
+    "percent": 25,
+    "type": "set_volume"
+   },
+   "bot_type": "notification",
+   "buttons": [
+    {
+     "action": "skip",
+     "label": "OK"
+    }
+   ],
+   "enabled": true,
+   "id": "music_volume_guard",
+   "message": {
+    "text": "A Music app just opened, Boss — media volume has been set to 25% automatically to keep your ears safe. Note: this works only if a group named 'Music' exists (Home tab) with your music apps in it.",
+    "title": "Volume set for your ears 🎧"
+   },
+   "name": "Music Volume Guard",
+   "settings": {},
+   "steps": [],
+   "trigger": {
+    "group": "Music",
+    "type": "app_group_used"
+   }
+  },
+  {
+   "bot_type": "notification",
+   "buttons": [
+    {
+     "action": "skip",
+     "label": "OK"
+    }
+   ],
+   "enabled": false,
+   "id": "notification_watcher_sample",
+   "message": {
+    "text": "This is a SAMPLE workflow, Boss: it fires on ANY app's notification ({app}: {text}). Edit it from the Workflows tab — or make your own with the AI tab, e.g. only WhatsApp, or only messages containing a word like OTP.",
+    "title": "Notification from {app}"
+   },
+   "name": "Notification Watcher (sample)",
+   "settings": {},
+   "steps": [],
+   "trigger": {
+    "type": "notification_posted"
+   }
+  }
+ ]
+}

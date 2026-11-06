@@ -1,10 +1,13 @@
 package com.spdev22.mycare.ui
 
+import android.app.Activity
 import android.content.Context
+import android.content.Intent
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
@@ -14,6 +17,8 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.Switch
 import android.widget.TextView
+import com.spdev22.mycare.MainActivity
+import com.spdev22.mycare.settings.SettingsActivity
 
 /**
  * UiKit — 0.2.5 ka shared "minimal, beautiful" design kit.
@@ -231,5 +236,104 @@ object UiKit {
             arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
             intArrayOf(TEAL, MUTED)
         )
+    }
+
+    // ---------- 0.2.8: bottom tab bar (5 tabs) ----------
+
+    const val TAB_HOME = 0
+    const val TAB_WORKFLOWS = 1
+    const val TAB_AI = 2
+    const val TAB_SETTINGS = 3
+    const val TAB_SYSTEM = 4
+
+    private data class TabDef(val emoji: String, val label: String, val target: Class<*>)
+
+    private fun tabDefs(): List<TabDef> = listOf(
+        TabDef("🏠", "Home", MainActivity::class.java),
+        TabDef("⚡", "Workflows", WorkflowListActivity::class.java),
+        TabDef("✨", "AI", AiWorkflowActivity::class.java),
+        TabDef("⚙️", "Settings", SettingsActivity::class.java),
+        TabDef("🛠️", "System", SystemHubActivity::class.java)
+    )
+
+    /**
+     * The shared bottom tab bar. Framework-only, zero animation:
+     * switching starts the tab's activity with CLEAR_TOP and the
+     * NO_ANIMATION flag, so it feels like one screen changing.
+     */
+    fun tabBar(context: Context, current: Int): LinearLayout {
+        val bar = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setBackgroundColor(CARD)
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+            setPadding(0, dp(context, 4), 0, dp(context, 4))
+        }
+        for ((index, def) in tabDefs().withIndex()) {
+            val active = index == current
+            val item = LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER
+                layoutParams = LinearLayout.LayoutParams(
+                    0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f
+                )
+                setPadding(0, dp(context, 5), 0, dp(context, 5))
+                isClickable = true
+            }
+            item.addView(TextView(context).apply {
+                text = def.emoji
+                textSize = 19f
+                gravity = Gravity.CENTER
+                alpha = if (active) 1f else 0.55f
+            })
+            item.addView(TextView(context).apply {
+                text = def.label
+                textSize = 11.5f
+                gravity = Gravity.CENTER
+                setTextColor(if (active) TEAL_DARK else MUTED)
+                if (active) typeface = Typeface.DEFAULT_BOLD
+            })
+            if (!active) {
+                item.setOnClickListener {
+                    val intent = Intent(context, def.target).apply {
+                        flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                            Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                            Intent.FLAG_ACTIVITY_NO_ANIMATION
+                    }
+                    context.startActivity(intent)
+                    (context as? Activity)?.overridePendingTransition(0, 0)
+                }
+            }
+            bar.addView(item)
+        }
+        return bar
+    }
+
+    /**
+     * A full tab screen: scrollable content on top (weight 1) and
+     * the tab bar pinned at the bottom. Tab activities build their
+     * content into a UiKit.root() as usual and hand it here.
+     */
+    fun tabScreen(activity: Activity, contentRoot: LinearLayout, currentTab: Int) {
+        val outer = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(BG)
+        }
+        val sc = scroll(activity, contentRoot)
+        sc.layoutParams = LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f
+        )
+        outer.addView(sc)
+        // thin divider above the bar
+        outer.addView(View(activity).apply {
+            setBackgroundColor(BORDER)
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(activity, 1)
+            )
+        })
+        outer.addView(tabBar(activity, currentTab))
+        activity.setContentView(outer)
     }
 }
