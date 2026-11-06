@@ -10,22 +10,31 @@ action buttons, multi-step flows, aur notification ke andar hi input
 **Target device:** Infinix Smart 7 HD (Android 12 Go, 32-bit, 2 GB RAM) —
 isi liye APK sirf `armeabi-v7a` ke liye banta hai aur design bilkul halka hai.
 
-## Status: v0.3.0 — Phase 3 COMPLETE (saare 16 workflows LIVE)
+## Status: v0.2.5 — Phase 4 ke fixes + Gemini AI workflows + naya UI
 
 Ho gaya hai:
 - Android project (Kotlin, package `com.spdev22.mycare`, minSdk 24)
 - **App Groups** screen — groups banao, group par tap karke App Picker
   se apps jodo/hato (D1)
-- **WorkflowEngine + Pack v3** — Workflow Format v1 ke **16 workflows**
+- **WorkflowEngine + Pack** — Workflow Format v1 ke **16 workflows**
   (`app/src/main/assets/workflows/pack_v1.json`)
 - **CareService** — live trigger engine: usage, unlock, battery,
-  interval, screenshot/contact observers, naya-app poll-diff,
-  cache/unused checks
+  interval, screenshot **folder-watch**, contact observer, naya-app
+  poll-diff, cache/unused checks
 - **Setup Wizard** — D11 ki saari permissions, ek-ek karke, Hinglish wajah ke saath
-- **2.1 jod:** Action-target **App Picker** (Music/Video/Chat buttons ke
-  liye app chuno), **Logs/Console** screen, **Signing keystore pin**
-  (har build ek hi signature — install-over chalega; v0.3 ke liye ek
-  aakhiri uninstall→install lagega)
+- **2.1 jod:** Action-target **App Picker** (Music/Video/Chat/Clock
+  buttons ke liye app chuno), **Logs/Console** screen, **Signing
+  keystore pin** (har build ek hi signature — install-over chalega)
+- **Editor-lite (0.2.3)** — har workflow ka message, samay aur limits
+  app ke andar hi badlo (pack par override, reset bhi hai)
+- **v0.2.4:** Alarm ke liye **Clock app slot**; Cache Safai ka poora
+  check ab Logs me faisle ke saath likha jata hai
+- **v0.2.5:** Alarm Suggestion ab alarm SET nahi karta — sirf chuna
+  hua **Clock app kholta** hai (alarm khud set karo); Screenshot Safai
+  ab **Screenshots folders par nazar** rakhkar nayi file pakadti hai;
+  **✨ AI se Workflow banwao (Gemini)** — apni baat likho, Gemini use
+  workflow banakar live kar de (key sirf phone par, Settings me);
+  poora app **naye minimal UI** (UiKit — safed cards, teal/amber) me
 - **Popup bot type (D7)** — Boredom Dost (4 buttons) aur Naya App→Group
 - GitHub Actions se debug APK build
 
