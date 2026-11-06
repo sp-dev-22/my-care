@@ -2,5 +2,5 @@
 <resources>
     <string name="app_name">My Care</string>
     <string name="accessibility_service_label">My Care</string>
-    <string name="accessibility_service_description">My Care needs this to send you to the Home screen for actions like Close App, and to recognise the foreground app. This service does NOT read your screen's content.</string>
+    <string name="accessibility_service_description">My Care needs this to send you to the Home screen for actions like Close App, and to recognise the foreground app. This service does NOT read the content of your screen.</string>
 </resources>
