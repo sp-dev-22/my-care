@@ -1,8 +1,6 @@
 package com.spdev22.mycare.ui
 
 import android.app.Activity
-import android.app.AlarmManager
-import android.app.PendingIntent
 import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.content.Intent
@@ -46,6 +44,21 @@ import org.json.JSONObject
  * volume, args percent) aur "set_brightness" (Settings.System se
  * screen brightness, args percent; WRITE_SETTINGS grant na ho to
  * imaandaar suchna, chup-chaap fail nahi).
+ * 0.2.7: (A) screenshot ka timed delete ab DeleteReceiver ki
+ * persisted pending-list + EXACT alarm + poll-fallback se chalta
+ * hai — yahan sirf addPending darj hota hai, purana inexact alarm
+ * wala code hata. (B) delete-confirm wala crash: is activity ka
+ * theme pehle Theme.NoDisplay tha, jiski shart hai ki activity
+ * onResume() poora hone se PEHLE finish() ho — warna framework use
+ * IllegalStateException se gira deta hai. Delete-confirm hi ekmatra
+ * raasta tha jo result ke intezaar me zinda rehta tha, isliye crash
+ * hamesha thik consent khulne ke pal par hota tha (consent window
+ * system process me pehle hi nikal chuki hoti thi — crash alert ke
+ * neeche dikhti thi aur delete bhi ho jata tha). Fix: theme ab
+ * Theme.Translucent.NoTitleBar hai (koi content view nahi banta,
+ * isliye ab bhi poori invisible; bas zinda rehna kanooni hai) —
+ * saath me consent launch par double-launch guard aur har stage
+ * ka poora exception log.
  */
 class TrampolineActivity : Activity() {
 
@@ -65,25 +78,34 @@ class TrampolineActivity : Activity() {
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == REQ_DELETE_CONFIRM) {
-            val uriStr = CareSettings.stateStr(this, DeleteReceiver.KEY_DELETE_URI)
+        if (requestCode != REQ_DELETE_CONFIRM) return
+        // 0.2.7: consent ka result — jo bhi ho, crash kabhi nahi;
+        // har haalaat LogStore me (granted / denied / gadbad)
+        try {
+            LogStore.log(
+                this,
+                "Screenshot delete consent result: " +
+                    if (resultCode == RESULT_OK) "GRANTED (delete ho gaya)"
+                    else "DENIED/cancel (code=$resultCode)"
+            )
             if (resultCode == RESULT_OK) {
                 // System ne confirm kiya aur file delete kar di
-                if (!uriStr.isNullOrEmpty()) {
-                    CareSettings.setStateStr(this, DeleteReceiver.KEY_DELETE_URI, "")
-                }
+                CareSettings.setStateStr(this, DeleteReceiver.KEY_DELETE_URI, "")
                 CareSettings.setStateStr(this, DeleteReceiver.KEY_DELETE_PATH, "")
                 NotifyFactory.postPlain(
                     this, NotifyFactory.notifIdFor("screenshot_safai") + 9,
                     "Screenshot delete ho gaya 🧹",
                     "Confirm karne ke liye dhanyavaad, Boss — screenshot saaf!"
                 )
-                LogStore.log(this, "Screenshot delete confirm OK")
-            } else {
-                LogStore.log(this, "Screenshot delete confirm cancel hua")
             }
-            finish()
+        } catch (e: Exception) {
+            LogStore.log(
+                this,
+                "Screenshot delete consent result handling FAIL: " +
+                    "${e.javaClass.simpleName}: ${e.message}"
+            )
         }
+        finish()
     }
 
     private fun handle(intent: Intent) {
@@ -232,7 +254,15 @@ class TrampolineActivity : Activity() {
         }
     }
 
-    /** Screenshot auto-delete ko AlarmManager par set karo. */
+    /**
+     * Screenshot auto-delete ki ghadi set karo.
+     * 0.2.7: purana inexact alarm (setAndAllowWhileIdle) Doze/
+     * batching me 5 min ko 10–15 min bana deta tha. Ab delete
+     * DeleteReceiver ki PERSISTED pending-list me darj hota hai —
+     * EXACT alarm + CareService ke poll ka overdue-check, jo pehle
+     * pahunche wahi chalata hai (entry pehle list se hat ti hai,
+     * isliye kaam ek hi baar hota hai).
+     */
     private fun scheduleScreenshotDelete(after: String) {
         val uriStr = CareSettings.stateStr(this, "state_screenshot_uri")
         val pathStr = CareSettings.stateStr(this, "state_screenshot_path")
@@ -240,9 +270,8 @@ class TrampolineActivity : Activity() {
             toast("Screenshot ka record nahi mila, Boss")
             return
         }
-        // DeleteReceiver yahi URI/path padhta hai — folder-watch (0.2.5)
-        // ke zamane me asal bharosa file PATH par hai; URI mile to
-        // system-confirm wala raasta bhi khula rehta hai.
+        // Legacy keys bhi taaza rakho — delete_now (turant wala
+        // raasta) aur consent ke baad ki safai yahi se padhte hain
         CareSettings.setStateStr(this, DeleteReceiver.KEY_DELETE_URI, uriStr ?: "")
         CareSettings.setStateStr(this, DeleteReceiver.KEY_DELETE_PATH, pathStr ?: "")
         val delayMs = when (after) {
@@ -255,25 +284,12 @@ class TrampolineActivity : Activity() {
             "1d" -> "1 din"
             else -> "1 ghanta"
         }
-        val am = getSystemService(AlarmManager::class.java)
-        val intent = Intent(this, DeleteReceiver::class.java).apply {
-            action = "com.spdev22.mycare.DELETE_SCREENSHOT"
-        }
-        val pi = PendingIntent.getBroadcast(
-            this, 7771, intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        DeleteReceiver.addPending(
+            this, pathStr ?: "", uriStr ?: "",
+            System.currentTimeMillis() + delayMs, label
         )
-        try {
-            am?.setAndAllowWhileIdle(
-                AlarmManager.RTC_WAKEUP,
-                System.currentTimeMillis() + delayMs, pi
-            )
-            toast("Theek hai Boss — screenshot $label me delete hoga")
-            LogStore.log(this, "Screenshot delete scheduled: $after")
-        } catch (e: Exception) {
-            toast("Delete schedule nahi ho paya, Boss")
-            LogStore.log(this, "Delete schedule fail: ${e.message}")
-        }
+        toast("Theek hai Boss — screenshot $label me delete hoga")
+        LogStore.log(this, "Screenshot delete scheduled: $after")
     }
 
     /**
@@ -283,13 +299,18 @@ class TrampolineActivity : Activity() {
      * (createDeleteRequest) kholo.
      */
     private fun deleteNowWithConfirm() {
-        // 1) Path wala seedha raasta (kuch builds par kaam kar jata hai)
+        // Stage 1/3: Path wala seedha raasta (kuch builds par kaam kar jata hai)
         val pathStr = CareSettings.stateStr(this, DeleteReceiver.KEY_DELETE_PATH)
             ?.takeIf { it.isNotEmpty() }
             ?: CareSettings.stateStr(this, "state_screenshot_path")
         if (!pathStr.isNullOrEmpty()) {
             try {
-                if (java.io.File(pathStr).delete()) {
+                val ok = java.io.File(pathStr).delete()
+                LogStore.log(
+                    this,
+                    "delete_now stage 1/3 File.delete: $ok (${java.io.File(pathStr).name})"
+                )
+                if (ok) {
                     CareSettings.setStateStr(this, DeleteReceiver.KEY_DELETE_URI, "")
                     CareSettings.setStateStr(this, DeleteReceiver.KEY_DELETE_PATH, "")
                     toast("Screenshot delete ho gaya 🧹")
@@ -297,7 +318,11 @@ class TrampolineActivity : Activity() {
                     return
                 }
             } catch (e: Exception) {
-                // seedha delete nahi hua — URI wala raasta neeche hai
+                LogStore.log(
+                    this,
+                    "delete_now stage 1/3 File.delete EXCEPTION: " +
+                        "${e.javaClass.simpleName}: ${e.message}"
+                )
             }
         }
         val uriStr = CareSettings.stateStr(this, DeleteReceiver.KEY_DELETE_URI)
@@ -311,11 +336,14 @@ class TrampolineActivity : Activity() {
             }
         if (uriStr.isNullOrEmpty()) {
             toast("Delete karne ke liye screenshot nahi mila")
+            LogStore.log(this, "delete_now FAIL: na path chala, na URI mila")
             return
         }
+        // Stage 2/3: MediaStore se seedha delete
         val uri = Uri.parse(uriStr)
         try {
             val rows = contentResolver.delete(uri, null, null)
+            LogStore.log(this, "delete_now stage 2/3 MediaStore rows=$rows")
             if (rows > 0) {
                 CareSettings.setStateStr(this, DeleteReceiver.KEY_DELETE_URI, "")
                 CareSettings.setStateStr(this, DeleteReceiver.KEY_DELETE_PATH, "")
@@ -323,16 +351,38 @@ class TrampolineActivity : Activity() {
                 LogStore.log(this, "Screenshot delete_now SUCCESS")
                 return
             }
+            // rows == 0 — neeche consent wala raasta
         } catch (e: SecurityException) {
             // RecoverableSecurityException (API 29+) bhi isi me aata hai —
             // neeche createDeleteRequest wala confirm raasta chalega
-            LogStore.log(this, "delete_now: security — confirm route")
+            LogStore.log(
+                this,
+                "delete_now stage 2/3 SecurityException " +
+                    "(${e.javaClass.simpleName}) — consent route"
+            )
         } catch (e: Exception) {
+            LogStore.log(
+                this,
+                "delete_now stage 2/3 FAIL: ${e.javaClass.simpleName}: ${e.message}"
+            )
             toast("Delete nahi hua, Boss")
             return
         }
-        // Android 11+ ka aadhikarik confirmation raasta
+        // Stage 3/3: Android 11+ ka aadhikarik confirmation raasta.
+        // 0.2.7 ki hifazatein: (a) consent EK hi baar launch hoga —
+        // pehle se intezaar chal raha ho to dobara nahi; (b) launch
+        // ya uski taiyaari me koi bhi exception aaye to poora
+        // class+message LogStore me aur waiting flag reset — taaki
+        // activity latki na rahe.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            if (waitingForDeleteConfirm) {
+                LogStore.log(
+                    this,
+                    "delete_now stage 3/3: consent pehle se khula hai — " +
+                        "dobara launch nahi kiya"
+                )
+                return
+            }
             try {
                 val pending = MediaStore.createDeleteRequest(
                     contentResolver, listOf(uri)
@@ -341,9 +391,19 @@ class TrampolineActivity : Activity() {
                 startIntentSenderForResult(
                     pending.intentSender, REQ_DELETE_CONFIRM, null, 0, 0, 0
                 )
+                LogStore.log(
+                    this,
+                    "delete_now stage 3/3: consent launch OK — user ke " +
+                        "jawab ka intezaar"
+                )
             } catch (e: Exception) {
+                waitingForDeleteConfirm = false
                 toast("Confirmation nahi khula — Gallery se delete kar dijiye")
-                LogStore.log(this, "createDeleteRequest fail: ${e.message}")
+                LogStore.log(
+                    this,
+                    "delete_now consent launch FAIL: " +
+                        "${e.javaClass.simpleName}: ${e.message}"
+                )
             }
         } else {
             toast("Is Android par My Care seedha delete nahi kar sakta — Gallery se kar dijiye")

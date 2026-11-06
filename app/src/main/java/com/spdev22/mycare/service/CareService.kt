@@ -154,6 +154,16 @@ class CareService : Service() {
         // 0.2.5: screenshot folder-watch (poll ke saath)
         checkScreenshotFolders(now)
 
+        // 0.2.7: screenshot pending deletes ka jaal — EXACT alarm
+        // kisi wajah se fail ho jaye (Doze/OEM ki marzi) to poll
+        // hi overdue delete nipta dega; entry pehle list se hat
+        // ti hai isliye alarm se dobara kaam nahi hoga (dedupe)
+        try {
+            DeleteReceiver.executeDueDeletes(this, "poll")
+        } catch (e: Exception) {
+            Log.w(TAG, "Pending delete check fail: ${e.message}")
+        }
+
         val usageOk = t.poll() // Usage Access nahi to usage triggers band, baaki chalte rahenge
         val batt = batteryInfo()
         for (packWf in pack) {

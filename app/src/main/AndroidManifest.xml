@@ -86,13 +86,22 @@
             android:excludeFromRecents="true"
             android:theme="@android:style/Theme.Material.Dialog" />
 
-        <!-- Notification buttons yahan aate hain — invisible, turant finish -->
+        <!-- Notification buttons yahan aate hain — invisible, turant finish.
+             0.2.7: theme Theme.NoDisplay se BADLA gaya — NoDisplay ki
+             shart hai ki activity onResume() se pehle finish() ho,
+             warna framework use IllegalStateException se gira deta
+             hai. Delete-confirm wala raasta result ke intezaar me
+             zinda rehta tha, isliye app thik consent khulne ke pal
+             par crash hoti thi (consent window system process se
+             pehle hi nikal chuki hoti thi). Translucent.NoTitleBar +
+             koi content view nahi = ab bhi poori invisible, par
+             zinda rehna kanooni hai. -->
         <activity
             android:name=".ui.TrampolineActivity"
             android:exported="false"
             android:excludeFromRecents="true"
             android:noHistory="true"
-            android:theme="@android:style/Theme.NoDisplay" />
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
 
         <service
             android:name=".service.CareService"
