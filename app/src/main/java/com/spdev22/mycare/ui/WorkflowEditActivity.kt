@@ -193,6 +193,8 @@ class WorkflowEditActivity : Activity() {
                 }
                 UserWorkflowStore.delete(this, packWf.id)
                 WorkflowOverrides.reset(this, packWf.id)
+                toast("Workflow delete ho gaya, Boss")
+                finish()
             }
             .setNegativeButton("Cancel", null)
             .show()
