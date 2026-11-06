@@ -131,8 +131,10 @@ object CareSettings {
 
     // ---------- action-target apps (2.1 ka app picker) ----------
     // Slot naam: "music", "video", "chat" (open_app buttons ke liye)
-    // aur "clock" (0.2.4: set_alarm ke liye) — user ne app chuna ho to
-    // wahi khulega/chalega, warna pack ke default candidates chalenge.
+    // aur "clock" (0.2.4: alarm ke liye chuna gaya; 0.2.5 se yahi app
+    // Alarm Suggestion par KHULTA hai — user alarm wahi set karta hai)
+    // — user ne app chuna ho to wahi khulega/chalega, warna pack ke
+    // default candidates chalenge.
 
     fun targetApp(context: Context, slot: String): String? =
         prefs(context).getString("target_$slot", null)
@@ -140,6 +142,41 @@ object CareSettings {
     fun setTargetApp(context: Context, slot: String, pkg: String?) {
         val edit = prefs(context).edit()
         if (pkg == null) edit.remove("target_$slot") else edit.putString("target_$slot", pkg)
+        edit.apply()
+    }
+
+    // ---------- Gemini AI (0.2.5: "AI se Workflow banwao") ----------
+    // API key SIRF is phone ke prefs me rehti hai — kahin upload ya
+    // share nahi hoti. Model ka naam user khud badal sakta hai.
+
+    const val KEY_GEMINI_MODEL = "set_gemini_model"
+    const val DEFAULT_GEMINI_MODEL = "gemini-2.0-flash"
+
+    fun geminiKey(context: Context): String? =
+        prefs(context).getString("gemini_api_key", null)?.takeIf { it.isNotBlank() }
+
+    fun setGeminiKey(context: Context, key: String?) {
+        val edit = prefs(context).edit()
+        if (key.isNullOrBlank()) {
+            edit.remove("gemini_api_key")
+        } else {
+            edit.putString("gemini_api_key", key.trim())
+        }
+        edit.apply()
+    }
+
+    fun geminiModel(context: Context): String =
+        prefs(context).getString(KEY_GEMINI_MODEL, null)
+            ?.takeIf { it.isNotBlank() } ?: DEFAULT_GEMINI_MODEL
+
+    fun setGeminiModel(context: Context, model: String) {
+        val clean = model.trim()
+        val edit = prefs(context).edit()
+        if (clean.isEmpty()) {
+            edit.remove(KEY_GEMINI_MODEL)
+        } else {
+            edit.putString(KEY_GEMINI_MODEL, clean)
+        }
         edit.apply()
     }
 }
