@@ -33,9 +33,16 @@ class PopupActivity : Activity() {
         super.onCreate(savedInstanceState)
         val mode = intent.getStringExtra(EXTRA_MODE) ?: "workflow"
 
+        // 0.2.5: popup ab safed rounded card jaisa dikhta hai
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(40, 36, 40, 36)
+            background = UiKit.cardBackground(this@PopupActivity)
+            val p = UiKit.dp(this@PopupActivity, 18)
+            setPadding(p, p, p, p)
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
         }
         val scroll = ScrollView(this)
         scroll.addView(root)
@@ -56,23 +63,11 @@ class PopupActivity : Activity() {
         }
         // 0.2.3: popup me bhi Editor-lite ke edited title/text dikhne chahiye
         val wf = WorkflowOverrides.effective(this, packWf)
-        root.addView(TextView(this).apply {
-            text = wf.title
-            textSize = 19f
-        })
-        root.addView(TextView(this).apply {
-            text = wf.text
-            setPadding(0, 8, 0, 16)
-        })
+        root.addView(UiKit.title(this, wf.title))
+        root.addView(UiKit.subtitle(this, wf.text))
         val notifId = NotifyFactory.notifIdFor(wf.id)
         for ((index, btn) in wf.buttons.withIndex()) {
-            val b = Button(this).apply {
-                text = btn.label
-                layoutParams = LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT
-                )
-            }
+            val b = UiKit.primaryButton(this, btn.label)
             b.setOnClickListener {
                 try {
                     startActivity(
@@ -91,32 +86,23 @@ class PopupActivity : Activity() {
     private fun buildAssignGroup(root: LinearLayout) {
         val pkg = intent.getStringExtra(EXTRA_PKG) ?: ""
         val label = intent.getStringExtra(EXTRA_LABEL) ?: pkg
-        root.addView(TextView(this).apply {
-            text = "Naya app install hua"
-            textSize = 19f
-        })
-        root.addView(TextView(this).apply {
-            text = "'$label' ko kis group me rakhein, Boss? " +
-                "Group me rakhne se uske hisaab aur suggestions sahi rahenge."
-            setPadding(0, 8, 0, 16)
-        })
+        root.addView(UiKit.title(this, "Naya app install hua"))
+        root.addView(
+            UiKit.subtitle(
+                this,
+                "'$label' ko kis group me rakhein, Boss? " +
+                    "Group me rakhne se uske hisaab aur suggestions sahi rahenge."
+            )
+        )
 
         val groups = GroupStore.loadGroups(this)
         if (groups.isEmpty()) {
-            root.addView(TextView(this).apply {
-                text = "Abhi koi group nahi bana hai. Pehle My Care kholkar " +
-                    "ek group bana dijiye — phir yeh app wahan jod sakte hain."
-                setPadding(0, 0, 0, 12)
-            })
+            root.addView(UiKit.body(this, "Abhi koi group nahi bana hai. Pehle My Care kholkar " +
+                "ek group bana dijiye — phir yeh app wahan jod sakte hain."))
+            root.addView(UiKit.gap(this, 6))
         }
         for (g in groups) {
-            val b = Button(this).apply {
-                text = g.name
-                layoutParams = LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT
-                )
-            }
+            val b = UiKit.primaryButton(this, g.name)
             b.setOnClickListener {
                 val added = GroupStore.addPackageToGroup(this, g.name, pkg)
                 toast(
@@ -132,13 +118,7 @@ class PopupActivity : Activity() {
     }
 
     private fun addCloseButton(root: LinearLayout, text: String = "Band karo") {
-        val b = Button(this).apply {
-            this.text = text
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            )
-        }
+        val b = UiKit.secondaryButton(this, text)
         b.setOnClickListener { finish() }
         root.addView(b)
     }

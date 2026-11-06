@@ -3,7 +3,6 @@ package com.spdev22.mycare.ui
 import android.app.Activity
 import android.app.AlarmManager
 import android.app.PendingIntent
-import android.app.RemoteInput
 import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.content.Intent
@@ -31,14 +30,17 @@ import org.json.JSONObject
  *
  * Activity PendingIntent se aane ki wajah se background me bhi
  * doosra app kholna / clock kholna allowed rehta hai (user ka tap
- * hi ijaazat hai). RemoteInput ka jawab bhi yahin process hota hai.
+ * hi ijaazat hai).
  *
  * Phase 3 ke naye actions: jump (agla step), delete_file (screenshot
  * auto-delete schedule), delete_now (system confirm ke saath delete),
  * open_app_info, open_url, open_whatsapp_chat.
  * open_app ab user ke chune hue target apps (slot) ko pehle dekhta hai.
- * 0.2.4: alarm (alarm_submit) bhi user ke chune hue Clock app ko hi
- * target karke lagta hai — target fail ho to bina-target fallback.
+ * 0.2.5: programmatic set_alarm (alarm_input/alarm_submit + RemoteInput
+ * wala title-step) POORI tarah HATA diya gaya — XOS par woh bharosemand
+ * nahi tha aur user ka saaf directive hai: naya action "open_clock"
+ * sirf Clock app KHOLTA hai (Settings wala chuna hua Clock app, warna
+ * system ki Alarms screen / khoj), alarm user khud set karta hai.
  */
 class TrampolineActivity : Activity() {
 
@@ -65,6 +67,7 @@ class TrampolineActivity : Activity() {
                 if (!uriStr.isNullOrEmpty()) {
                     CareSettings.setStateStr(this, DeleteReceiver.KEY_DELETE_URI, "")
                 }
+                CareSettings.setStateStr(this, DeleteReceiver.KEY_DELETE_PATH, "")
                 NotifyFactory.postPlain(
                     this, NotifyFactory.notifIdFor("screenshot_safai") + 9,
                     "Screenshot delete ho gaya 🧹",
@@ -173,14 +176,12 @@ class TrampolineActivity : Activity() {
                 }
             }
 
-            "alarm_input" -> {
-                // Alarm Suggestion ka step 2: title likhne wali notification
+            "open_clock" -> {
+                // 0.2.5: Alarm Suggestion ka ekmatra kaam — Clock kholo,
+                // alarm user khud set karega (set_alarm hata diya gaya)
                 if (notifId > 0) NotifyFactory.cancel(this, notifId)
-                val wf = WorkflowEngine.loadPack(this).firstOrNull { it.id == wfId }
-                if (wf != null) NotifyFactory.postAlarmInput(this, wf)
+                openClockApp()
             }
-
-            "alarm_submit" -> submitAlarm(intent, notifId)
 
             "jump" -> {
                 // Multi-step flow ka agla step post karo (screenshot flow)
@@ -216,12 +217,16 @@ class TrampolineActivity : Activity() {
     /** Screenshot auto-delete ko AlarmManager par set karo. */
     private fun scheduleScreenshotDelete(after: String) {
         val uriStr = CareSettings.stateStr(this, "state_screenshot_uri")
-        if (uriStr.isNullOrEmpty()) {
+        val pathStr = CareSettings.stateStr(this, "state_screenshot_path")
+        if (uriStr.isNullOrEmpty() && pathStr.isNullOrEmpty()) {
             toast("Screenshot ka record nahi mila, Boss")
             return
         }
-        // DeleteReceiver yahi URI padhta hai
-        CareSettings.setStateStr(this, DeleteReceiver.KEY_DELETE_URI, uriStr)
+        // DeleteReceiver yahi URI/path padhta hai — folder-watch (0.2.5)
+        // ke zamane me asal bharosa file PATH par hai; URI mile to
+        // system-confirm wala raasta bhi khula rehta hai.
+        CareSettings.setStateStr(this, DeleteReceiver.KEY_DELETE_URI, uriStr ?: "")
+        CareSettings.setStateStr(this, DeleteReceiver.KEY_DELETE_PATH, pathStr ?: "")
         val delayMs = when (after) {
             "5m" -> 5 * 60_000L
             "1d" -> 24 * 60 * 60_000L
@@ -254,12 +259,38 @@ class TrampolineActivity : Activity() {
     }
 
     /**
-     * Abhi delete karo — pehle direct koshish, Android mana kare to
-     * system ka confirmation dialog (createDeleteRequest) kholo.
+     * Abhi delete karo — 0.2.5 ke folder-watch ke saath pehle file
+     * PATH se seedha delete ki koshish, phir MediaStore URI wala
+     * raasta: direct delete fail ho to system ka confirmation dialog
+     * (createDeleteRequest) kholo.
      */
     private fun deleteNowWithConfirm() {
+        // 1) Path wala seedha raasta (kuch builds par kaam kar jata hai)
+        val pathStr = CareSettings.stateStr(this, DeleteReceiver.KEY_DELETE_PATH)
+            ?.takeIf { it.isNotEmpty() }
+            ?: CareSettings.stateStr(this, "state_screenshot_path")
+        if (!pathStr.isNullOrEmpty()) {
+            try {
+                if (java.io.File(pathStr).delete()) {
+                    CareSettings.setStateStr(this, DeleteReceiver.KEY_DELETE_URI, "")
+                    CareSettings.setStateStr(this, DeleteReceiver.KEY_DELETE_PATH, "")
+                    toast("Screenshot delete ho gaya 🧹")
+                    LogStore.log(this, "Screenshot delete_now SUCCESS (file path)")
+                    return
+                }
+            } catch (e: Exception) {
+                // seedha delete nahi hua — URI wala raasta neeche hai
+            }
+        }
         val uriStr = CareSettings.stateStr(this, DeleteReceiver.KEY_DELETE_URI)
+            ?.takeIf { it.isNotEmpty() }
             ?: CareSettings.stateStr(this, "state_screenshot_uri")
+                ?.takeIf { it.isNotEmpty() }
+            ?: if (!pathStr.isNullOrEmpty()) {
+                DeleteReceiver.mediaUriForPath(this, pathStr)?.toString()
+            } else {
+                null
+            }
         if (uriStr.isNullOrEmpty()) {
             toast("Delete karne ke liye screenshot nahi mila")
             return
@@ -269,6 +300,7 @@ class TrampolineActivity : Activity() {
             val rows = contentResolver.delete(uri, null, null)
             if (rows > 0) {
                 CareSettings.setStateStr(this, DeleteReceiver.KEY_DELETE_URI, "")
+                CareSettings.setStateStr(this, DeleteReceiver.KEY_DELETE_PATH, "")
                 toast("Screenshot delete ho gaya 🧹")
                 LogStore.log(this, "Screenshot delete_now SUCCESS")
                 return
@@ -365,94 +397,82 @@ class TrampolineActivity : Activity() {
     }
 
     /**
-     * Alarm title ka RemoteInput jawab — title se alarm lagao.
-     * CHOICE (simple rakha gaya hai): title me time likha ho (jaise
-     * "7:30" ya "7 baje") to wahi time, warna agla subah 6:00.
+     * 0.2.5: Clock app KHOLO — alarm set karna user ka kaam hai.
+     *
+     * Koshishon ka kram:
+     *  1. Settings me chuna hua Clock app (slot) — pehle uski Alarms
+     *     screen (ACTION_SHOW_ALARMS targeted), phir uska launcher.
+     *  2. Bina target ke system ki Alarms screen.
+     *  3. Jaane-maane clock packages, phir launcher apps me naam/
+     *     package se "clock" ki khoj.
+     * Har koshish LogStore me likhti hai — kaun sa package khula.
      */
-    private fun submitAlarm(intent: Intent, notifId: Int) {
-        if (notifId > 0) NotifyFactory.cancel(this, notifId)
-        val results = RemoteInput.getResultsFromIntent(intent)
-        val raw = results?.getCharSequence(NotifyFactory.KEY_ALARM_TITLE)
-            ?.toString()?.trim().orEmpty()
-
-        var hour = 6
-        var minute = 0
-        var title = raw
-
-        val colonTime = Regex("""(\d{1,2})[:.](\d{2})""").find(raw)
-        val bajeTime = Regex("""(\d{1,2})\s*baje""").find(raw)
-        when {
-            colonTime != null -> {
-                hour = colonTime.groupValues[1].toInt().coerceIn(0, 23)
-                minute = colonTime.groupValues[2].toInt().coerceIn(0, 59)
-                title = raw.replace(colonTime.value, "").trim()
+    private fun openClockApp() {
+        val slotPkg = CareSettings.targetApp(this, "clock")
+        if (!slotPkg.isNullOrEmpty()) {
+            val alarms = Intent(AlarmClock.ACTION_SHOW_ALARMS)
+                .setPackage(slotPkg)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            if (tryStart(alarms)) {
+                LogStore.log(this, "Clock khola: $slotPkg (SHOW_ALARMS, chuna hua app)")
+                return
             }
-            bajeTime != null -> {
-                hour = bajeTime.groupValues[1].toInt().coerceIn(0, 23)
-                minute = 0
-                title = raw.replace(bajeTime.value, "").trim()
+            val launch = packageManager.getLaunchIntentForPackage(slotPkg)
+            if (launch != null) {
+                launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                if (tryStart(launch)) {
+                    LogStore.log(this, "Clock khola: $slotPkg (launcher, chuna hua app)")
+                    return
+                }
             }
+            LogStore.log(this, "Clock: chuna hua app ($slotPkg) nahi khula — auto khoj")
         }
-        if (title.isEmpty()) title = "Subah ka alarm"
-
-        val alarmIntent = Intent(AlarmClock.ACTION_SET_ALARM).apply {
-            putExtra(AlarmClock.EXTRA_HOUR, hour)
-            putExtra(AlarmClock.EXTRA_MINUTES, minute)
-            putExtra(AlarmClock.EXTRA_MESSAGE, title)
-            putExtra(AlarmClock.EXTRA_SKIP_UI, true)
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        val generic = Intent(AlarmClock.ACTION_SHOW_ALARMS)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        if (tryStart(generic)) {
+            LogStore.log(this, "Clock khola: auto (SHOW_ALARMS)")
+            return
         }
-        val confirmId = NotifyFactory.notifIdFor("alarm_suggestion") + 5
-        // 0.2.4 BUG FIX: user ne Settings se Clock app chuna ho to alarm
-        // SEEDHA usi app ko bhejo (setPackage) — XOS par bina target wala
-        // SET_ALARM iraada aksar galat jagah jaakar sirf ek notification
-        // bankar reh jata tha aur asal alarm nahi lagta tha. Chuna hua
-        // app mana kar de to purana bina-target wala raasta fallback hai.
-        val clockPkg = CareSettings.targetApp(this, "clock")
-        var usedPkg: String? = null
-        var alarmOk = false
-        if (!clockPkg.isNullOrEmpty()) {
-            val targeted = Intent(alarmIntent).setPackage(clockPkg)
-            if (tryStart(targeted)) {
-                alarmOk = true
-                usedPkg = clockPkg
-            } else {
-                LogStore.log(
-                    this,
-                    "Alarm: chuna hua clock app ($clockPkg) SET_ALARM nahi le " +
-                        "paya — bina target ke dobara koshish"
-                )
+        val candidates = listOf(
+            "com.google.android.deskclock", "com.android.deskclock",
+            "com.transsion.clock", "com.infinix.deskclock"
+        )
+        for (pkg in candidates) {
+            val launch = packageManager.getLaunchIntentForPackage(pkg) ?: continue
+            launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            if (tryStart(launch)) {
+                LogStore.log(this, "Clock khola: $pkg (package khoj se)")
+                return
             }
         }
-        if (!alarmOk && tryStart(alarmIntent)) {
-            alarmOk = true
+        try {
+            val launcherApps = packageManager.queryIntentActivities(
+                Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER), 0
+            )
+            for (ri in launcherApps) {
+                val pkg = ri.activityInfo?.packageName ?: continue
+                val label = try {
+                    ri.loadLabel(packageManager).toString()
+                } catch (e: Exception) {
+                    ""
+                }
+                if (pkg.contains("clock", ignoreCase = true) ||
+                    label.contains("clock", ignoreCase = true)
+                ) {
+                    val launch = packageManager.getLaunchIntentForPackage(pkg)
+                        ?: continue
+                    launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    if (tryStart(launch)) {
+                        LogStore.log(this, "Clock khola: $pkg (launcher khoj se)")
+                        return
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            // khoj fail — neeche ka sandesh hi kaafi hai
         }
-        if (alarmOk) {
-            LogStore.log(
-                this,
-                "Alarm set OK: ${"%02d:%02d".format(hour, minute)} \"$title\" " +
-                    "via ${usedPkg ?: "auto (koi clock target nahi)"}"
-            )
-            NotifyFactory.postPlain(
-                this, confirmId,
-                "Alarm lag gaya ⏰",
-                "\"$title\" — ${"%02d:%02d".format(hour, minute)} baje ka alarm " +
-                    "set ho gaya hai. Kal subah milte hain, Boss!"
-            )
-        } else {
-            LogStore.log(
-                this,
-                "Alarm set FAIL: koi clock app nahi mila " +
-                    "(target=${clockPkg ?: "auto"})"
-            )
-            NotifyFactory.postPlain(
-                this, confirmId,
-                "Alarm nahi laga 😔",
-                "Clock app nahi mila, Boss. Settings → Action Target Apps me " +
-                    "apna Clock app chun lein, ya Clock app se khud " +
-                    "${"%02d:%02d".format(hour, minute)} ka alarm laga dijiye."
-            )
-        }
+        toast("Clock app nahi mila, Boss — Settings me apna Clock app chun dijiye")
+        LogStore.log(this, "Clock open FAIL: koi clock app nahi mila")
     }
 
     private fun parseArgs(json: String?): Map<String, String> {

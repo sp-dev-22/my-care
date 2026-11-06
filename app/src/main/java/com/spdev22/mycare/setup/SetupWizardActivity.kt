@@ -16,6 +16,7 @@ import android.widget.TextView
 import android.widget.Toast
 import com.spdev22.mycare.engine.UsageTracker
 import com.spdev22.mycare.receiver.CareDeviceAdminReceiver
+import com.spdev22.mycare.ui.UiKit
 
 /**
  * Setup Wizard (D11) — saari permissions ek-ek karke,
@@ -48,43 +49,32 @@ class SetupWizardActivity : Activity() {
 
     private fun buildUi() {
 
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(40, 40, 40, 40)
-        }
-        val scroll = ScrollView(this)
-        scroll.addView(root)
-        setContentView(scroll)
+        val root = UiKit.root(this)
+        setContentView(UiKit.scroll(this, root))
 
-        root.addView(TextView(this).apply {
-            text = "Setup Wizard"
-            textSize = 20f
-        })
-        root.addView(TextView(this).apply {
-            text = "Boss, My Care ko aapka khayal rakhne ke liye kuch permissions " +
-                "chahiye hongi. Ek-ek karke dete jaiye — har ek ki wajah saath me " +
-                "likhi hai. Bina inke aadhe workflows sirf kagaz par rahenge."
-            setPadding(0, 8, 0, 20)
-        })
+        root.addView(UiKit.title(this, "Setup Wizard"))
+        root.addView(
+            UiKit.subtitle(
+                this,
+                "Boss, My Care ko aapka khayal rakhne ke liye kuch permissions " +
+                    "chahiye hongi. Ek-ek karke dete jaiye — har ek ki wajah saath me " +
+                    "likhi hai. Bina inke aadhe workflows sirf kagaz par rahenge."
+            )
+        )
 
         for (item in items()) {
-            root.addView(TextView(this).apply {
-                text = item.title
-                textSize = 16f
-                setPadding(0, 18, 0, 2)
+            val card = UiKit.card(this)
+            card.addView(UiKit.body(this, item.title, 16f).apply {
+                typeface = android.graphics.Typeface.DEFAULT_BOLD
             })
-            root.addView(TextView(this).apply {
-                text = item.why
-                setPadding(0, 0, 0, 6)
-            })
+            card.addView(UiKit.small(this, item.why))
             item.statusText?.let { status ->
-                root.addView(TextView(this).apply {
-                    text = status()
-                    textSize = 15f
-                    setPadding(0, 0, 0, 6)
+                card.addView(UiKit.body(this, status(), 14f).apply {
+                    setPadding(0, UiKit.dp(this@SetupWizardActivity, 4), 0, 0)
                 })
             }
-            val btn = Button(this).apply { text = "Setup karo" }
+            card.addView(UiKit.gap(this, 6))
+            val btn = UiKit.primaryButton(this, "Setup karo")
             btn.setOnClickListener {
                 try {
                     item.open(this@SetupWizardActivity)
@@ -96,14 +86,12 @@ class SetupWizardActivity : Activity() {
                     ).show()
                 }
             }
-            root.addView(btn)
+            card.addView(btn)
+            root.addView(card)
         }
 
-        root.addView(TextView(this).apply {
-            text = "Note: Koi bhi permission zabardasti nahi hai. Jo nahi denge, " +
-                "us se jude workflows band rahenge — baaki app chalta rahega."
-            setPadding(0, 24, 0, 0)
-        })
+        root.addView(UiKit.small(this, "Note: Koi bhi permission zabardasti nahi hai. Jo nahi denge, " +
+            "us se jude workflows band rahenge — baaki app chalta rahega."))
     }
 
     private fun items(): List<PermItem> = listOf(
@@ -183,8 +171,9 @@ class SetupWizardActivity : Activity() {
         },
         PermItem(
             "7. Photos / Media",
-            "Screenshot Safai flow ke liye — screenshot bana ki khabar aur, " +
-                "aapke kehne par, use delete karna."
+            "Screenshot Safai flow ke liye — 0.2.5 se My Care Screenshots " +
+                "folder par nazar rakhkar naye screenshot ki khabar deta hai " +
+                "aur, aapke kehne par, use delete bhi karta hai."
         ) { a ->
             val perm = if (Build.VERSION.SDK_INT >= 33) {
                 Manifest.permission.READ_MEDIA_IMAGES
