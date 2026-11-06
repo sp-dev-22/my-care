@@ -188,7 +188,7 @@ object NotifyFactory {
                 Notification.BigPictureStyle()
                     .bigPicture(bitmap)
                     .bigContentTitle(applyVars(eff.title, emptyMap()))
-                    .summaryText(text)
+                    .setSummaryText(text)
             )
             .setSmallIcon(android.R.drawable.ic_dialog_alert)
             .setContentIntent(contentPi)
