@@ -187,7 +187,13 @@ class WorkflowEditActivity : Activity() {
                 "'${packWf.name}' hamesha ke liye hat jayega, Boss. " +
                     "Uske saare edits aur On/Off sthiti bhi saaf ho jayegi."
             )
-            .setPositiveButton("Delete") { _, _ -> }
+            .setPositiveButton("Delete") { _, _ ->
+                if (packWf.triggerType == "time") {
+                    DailyScheduler.cancelOne(this, packWf)
+                }
+                UserWorkflowStore.delete(this, packWf.id)
+                WorkflowOverrides.reset(this, packWf.id)
+            }
             .setNegativeButton("Cancel", null)
             .show()
     }
