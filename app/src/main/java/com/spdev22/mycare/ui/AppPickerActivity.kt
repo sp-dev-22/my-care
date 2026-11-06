@@ -188,6 +188,7 @@ class AppPickerActivity : Activity() {
         "music" -> "Music button ke liye app chunein"
         "video" -> "Videos / YouTube button ke liye app chunein"
         "chat" -> "Muse AI / WhatsApp button ke liye app chunein"
+        "clock" -> "Alarm ke liye Clock app chunein"
         else -> "Target app chunein"
     }
 

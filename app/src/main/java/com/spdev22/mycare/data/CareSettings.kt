@@ -130,8 +130,9 @@ object CareSettings {
     }
 
     // ---------- action-target apps (2.1 ka app picker) ----------
-    // Slot naam: "music", "video", "chat" — user ne app chuna ho to
-    // wahi khulega, warna pack ke default candidates chalenge.
+    // Slot naam: "music", "video", "chat" (open_app buttons ke liye)
+    // aur "clock" (0.2.4: set_alarm ke liye) — user ne app chuna ho to
+    // wahi khulega/chalega, warna pack ke default candidates chalenge.
 
     fun targetApp(context: Context, slot: String): String? =
         prefs(context).getString("target_$slot", null)

@@ -98,12 +98,15 @@ class SettingsActivity : Activity() {
 
         sectionLabel(root, "Action Target Apps")
         root.addView(TextView(this).apply {
-            text = "Notification ke buttons kaun sa app kholenge, yahan se chunein."
+            text = "Notification ke buttons kaun sa app kholenge, yahan se chunein. " +
+                "Clock app alarm lagane (Alarm Suggestion) ke kaam aayega — " +
+                "agar alarm sahi se nahi lagta to apna Clock app yahan chun lein."
             setPadding(0, 0, 0, 4)
         })
         slotRow(root, "Music button", "music")
         slotRow(root, "Videos / YouTube button", "video")
         slotRow(root, "Muse AI / WhatsApp button", "chat")
+        slotRow(root, "Alarm ke liye Clock app", "clock")
 
         sectionLabel(root, "Workflows ke liye zaroori Groups")
         root.addView(TextView(this).apply {

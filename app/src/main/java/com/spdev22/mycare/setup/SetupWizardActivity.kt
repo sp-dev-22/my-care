@@ -14,6 +14,7 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import com.spdev22.mycare.engine.UsageTracker
 import com.spdev22.mycare.receiver.CareDeviceAdminReceiver
 
 /**
@@ -21,18 +22,31 @@ import com.spdev22.mycare.receiver.CareDeviceAdminReceiver
  * har ek ki WAJAH ke saath. JARVIS sp3 ke wizard wala pattern.
  *
  * Phase 1: screen aur saare raaste (intents) taiyar hain.
- * Kaunsi permission mili hai, iski live-checking agle phase me judegi.
+ * 0.2.4: Usage Access ki LIVE sthiti bhi dikhti hai — mili hai
+ * ya nahi — kyunki bina iske Cache Safai jaise checks chup-chaap
+ * band rehte the aur user ko wajah pata hi nahi chalti thi.
  */
 class SetupWizardActivity : Activity() {
 
     private data class PermItem(
         val title: String,
         val why: String,
+        val statusText: (() -> String)? = null,
         val open: (Activity) -> Unit
     )
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        buildUi()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Settings se permission dekar lautne par sthiti taaza dikhe
+        buildUi()
+    }
+
+    private fun buildUi() {
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -63,6 +77,13 @@ class SetupWizardActivity : Activity() {
                 text = item.why
                 setPadding(0, 0, 0, 6)
             })
+            item.statusText?.let { status ->
+                root.addView(TextView(this).apply {
+                    text = status()
+                    textSize = 15f
+                    setPadding(0, 0, 0, 6)
+                })
+            }
             val btn = Button(this).apply { text = "Setup karo" }
             btn.setOnClickListener {
                 try {
@@ -89,7 +110,17 @@ class SetupWizardActivity : Activity() {
         PermItem(
             "1. Usage Access",
             "Kaun sa app kitni der chala — App Groups, boredom detection aur " +
-                "30-minute wale triggers ki jaan yahi permission hai."
+                "30-minute wale triggers ki jaan yahi permission hai.",
+            statusText = {
+                if (UsageTracker.hasUsageAccess(this@SetupWizardActivity)) {
+                    "Sthiti: MILI HAI ✓ — Cache Safai, Unused Apps aur usage " +
+                        "wale saare checks chal sakte hain."
+                } else {
+                    "Sthiti: NAHI MILI ✗ — bina iske Cache Safai, Unused Apps " +
+                        "aur usage wale triggers BAND rahenge. Neeche wala " +
+                        "button dabakar My Care ko Usage Access de dein."
+                }
+            }
         ) { a ->
             a.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
         },

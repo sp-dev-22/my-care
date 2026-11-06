@@ -37,6 +37,8 @@ import org.json.JSONObject
  * auto-delete schedule), delete_now (system confirm ke saath delete),
  * open_app_info, open_url, open_whatsapp_chat.
  * open_app ab user ke chune hue target apps (slot) ko pehle dekhta hai.
+ * 0.2.4: alarm (alarm_submit) bhi user ke chune hue Clock app ko hi
+ * target karke lagta hai — target fail ho to bina-target fallback.
  */
 class TrampolineActivity : Activity() {
 
@@ -401,7 +403,36 @@ class TrampolineActivity : Activity() {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK
         }
         val confirmId = NotifyFactory.notifIdFor("alarm_suggestion") + 5
-        if (tryStart(alarmIntent)) {
+        // 0.2.4 BUG FIX: user ne Settings se Clock app chuna ho to alarm
+        // SEEDHA usi app ko bhejo (setPackage) — XOS par bina target wala
+        // SET_ALARM iraada aksar galat jagah jaakar sirf ek notification
+        // bankar reh jata tha aur asal alarm nahi lagta tha. Chuna hua
+        // app mana kar de to purana bina-target wala raasta fallback hai.
+        val clockPkg = CareSettings.targetApp(this, "clock")
+        var usedPkg: String? = null
+        var alarmOk = false
+        if (!clockPkg.isNullOrEmpty()) {
+            val targeted = Intent(alarmIntent).setPackage(clockPkg)
+            if (tryStart(targeted)) {
+                alarmOk = true
+                usedPkg = clockPkg
+            } else {
+                LogStore.log(
+                    this,
+                    "Alarm: chuna hua clock app ($clockPkg) SET_ALARM nahi le " +
+                        "paya — bina target ke dobara koshish"
+                )
+            }
+        }
+        if (!alarmOk && tryStart(alarmIntent)) {
+            alarmOk = true
+        }
+        if (alarmOk) {
+            LogStore.log(
+                this,
+                "Alarm set OK: ${"%02d:%02d".format(hour, minute)} \"$title\" " +
+                    "via ${usedPkg ?: "auto (koi clock target nahi)"}"
+            )
             NotifyFactory.postPlain(
                 this, confirmId,
                 "Alarm lag gaya ⏰",
@@ -409,10 +440,16 @@ class TrampolineActivity : Activity() {
                     "set ho gaya hai. Kal subah milte hain, Boss!"
             )
         } else {
+            LogStore.log(
+                this,
+                "Alarm set FAIL: koi clock app nahi mila " +
+                    "(target=${clockPkg ?: "auto"})"
+            )
             NotifyFactory.postPlain(
                 this, confirmId,
                 "Alarm nahi laga 😔",
-                "Clock app nahi mila, Boss. Clock app se khud " +
+                "Clock app nahi mila, Boss. Settings → Action Target Apps me " +
+                    "apna Clock app chun lein, ya Clock app se khud " +
                     "${"%02d:%02d".format(hour, minute)} ka alarm laga dijiye."
             )
         }
