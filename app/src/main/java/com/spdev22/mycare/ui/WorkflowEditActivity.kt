@@ -194,6 +194,7 @@ class WorkflowEditActivity : Activity() {
                 UserWorkflowStore.delete(this, packWf.id)
                 WorkflowOverrides.reset(this, packWf.id)
                 WorkflowPrefs.clearOverride(this, packWf.id)
+                LogStore.log(this, "User workflow [${packWf.id}] delete hua (Editor)")
                 toast("Workflow delete ho gaya, Boss")
                 finish()
             }

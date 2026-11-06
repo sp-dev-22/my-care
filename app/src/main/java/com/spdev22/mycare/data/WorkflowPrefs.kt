@@ -42,4 +42,9 @@ object WorkflowPrefs {
     fun setEnabled(context: Context, wfId: String, enabled: Boolean) {
         prefs(context).edit().putBoolean(KEY_PREFIX + wfId, enabled).apply()
     }
+
+    /** Override poori tarah hata do (jaise workflow delete hone par). */
+    fun clearOverride(context: Context, wfId: String) {
+        prefs(context).edit().remove(KEY_PREFIX + wfId).apply()
+    }
 }
