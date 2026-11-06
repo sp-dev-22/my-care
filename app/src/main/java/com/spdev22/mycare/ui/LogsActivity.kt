@@ -1,6 +1,8 @@
 package com.spdev22.mycare.ui
 
 import android.app.Activity
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.os.Bundle
 import android.text.method.ScrollingMovementMethod
 import android.view.ViewGroup
@@ -61,6 +63,18 @@ class LogsActivity : Activity() {
         val refreshBtn = UiKit.primaryButton(this, "Refresh")
         refreshBtn.setOnClickListener { refresh() }
         root.addView(refreshBtn)
+
+        // 0.2.9: poori log ek tap me clipboard par — kahin paste
+        // karke bhejni ho to aasaan.
+        val copyBtn = UiKit.secondaryButton(this, "📋 Copy logs")
+        copyBtn.setOnClickListener {
+            val cm = getSystemService(ClipboardManager::class.java)
+            cm?.setPrimaryClip(
+                ClipData.newPlainText("My Care logs", LogStore.readAll(this))
+            )
+            Toast.makeText(this, "Logs copied to clipboard", Toast.LENGTH_SHORT).show()
+        }
+        root.addView(copyBtn)
 
         val clearBtn = UiKit.secondaryButton(this, "Clear logs")
         clearBtn.setOnClickListener {

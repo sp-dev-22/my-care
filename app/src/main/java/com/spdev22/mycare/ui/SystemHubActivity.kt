@@ -47,6 +47,14 @@ class SystemHubActivity : Activity() {
         }
         root.addView(logsBtn)
 
+        // 0.2.9: one-file backup / restore of groups, settings,
+        // workflow switches, edits and AI workflows.
+        val backupBtn = UiKit.primaryButton(this, "💾 Backup / Restore")
+        backupBtn.setOnClickListener {
+            startActivity(Intent(this, BackupRestoreActivity::class.java))
+        }
+        root.addView(backupBtn)
+
         root.addView(
             UiKit.small(
                 this,

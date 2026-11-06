@@ -5,6 +5,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.view.Gravity
 import android.view.ViewGroup
+import android.widget.CompoundButton
 import android.widget.LinearLayout
 import android.widget.Switch
 import android.widget.Toast
@@ -14,6 +15,7 @@ import com.spdev22.mycare.data.WorkflowPrefs
 import com.spdev22.mycare.engine.Workflow
 import com.spdev22.mycare.engine.WorkflowEngine
 import com.spdev22.mycare.notify.DailyScheduler
+import com.spdev22.mycare.setup.AutoReplyConfirm
 import com.spdev22.mycare.setup.WorkflowPermissions
 
 /**
@@ -107,33 +109,59 @@ class WorkflowListActivity : Activity() {
         )
         row.addView(texts)
 
-        val toggle = Switch(this).apply {
+        // ON/OFF ki asal kriya — toggle listener aur (0.2.9)
+        // auto-reply confirmation dono yahi se guzarte hain.
+        fun applyToggle(checked: Boolean) {
+            WorkflowPrefs.setEnabled(this, wf.id, checked)
+            if (wf.triggerType == "time") {
+                // Time wale workflow ka alarm schedule/cancel turant taaza karo
+                DailyScheduler.scheduleAll(this)
+            }
+            LogStore.log(
+                this,
+                "Workflow [${wf.id}] switched ${if (checked) "ON" else "OFF"} by user"
+            )
+            Toast.makeText(
+                this,
+                "${wf.name} — ${if (checked) "ON" else "OFF"}",
+                Toast.LENGTH_SHORT
+            ).show()
+            if (checked) {
+                // 0.2.8: permission-on-enable — if this workflow
+                // still needs permissions, offer them right now
+                WorkflowPermissions.promptIfMissing(this, wf)
+            }
+        }
+
+        val toggle = Switch(this)
+        var suppressToggleEvent = false
+        val toggleListener = CompoundButton.OnCheckedChangeListener { _, checked ->
+            if (suppressToggleEvent) return@OnCheckedChangeListener
+            if (checked && AutoReplyConfirm.appliesTo(wf)) {
+                // 0.2.9: auto-reply ON karne se pehle switch ko
+                // wapas OFF par roko aur saaf anumati maango —
+                // switch tabhi aage badhega jab user "Yes, turn
+                // it on" kahega.
+                suppressToggleEvent = true
+                toggle.isChecked = false
+                suppressToggleEvent = false
+                AutoReplyConfirm.confirmIfNeeded(this, wf) {
+                    suppressToggleEvent = true
+                    toggle.isChecked = true
+                    suppressToggleEvent = false
+                    applyToggle(true)
+                }
+            } else {
+                applyToggle(checked)
+            }
+        }
+        toggle.apply {
             // Listener lagane se PEHLE sthiti set karo, taaki khulte hi
             // purani value par bekaar ka event na fire ho jaye
             setOnCheckedChangeListener(null)
             isChecked = WorkflowPrefs.isEnabled(this@WorkflowListActivity, wf)
             UiKit.tintSwitch(this@WorkflowListActivity, this)
-            setOnCheckedChangeListener { _, checked ->
-                WorkflowPrefs.setEnabled(this@WorkflowListActivity, wf.id, checked)
-                if (wf.triggerType == "time") {
-                    // Time wale workflow ka alarm schedule/cancel turant taaza karo
-                    DailyScheduler.scheduleAll(this@WorkflowListActivity)
-                }
-                LogStore.log(
-                    this@WorkflowListActivity,
-                    "Workflow [${wf.id}] switched ${if (checked) "ON" else "OFF"} by user"
-                )
-                Toast.makeText(
-                    this@WorkflowListActivity,
-                    "${wf.name} — ${if (checked) "ON" else "OFF"}",
-                    Toast.LENGTH_SHORT
-                ).show()
-                if (checked) {
-                    // 0.2.8: permission-on-enable — if this workflow
-                    // still needs permissions, offer them right now
-                    WorkflowPermissions.promptIfMissing(this@WorkflowListActivity, wf)
-                }
-            }
+            setOnCheckedChangeListener(toggleListener)
         }
         row.addView(toggle)
 

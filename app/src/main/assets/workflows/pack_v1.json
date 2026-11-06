@@ -1,7 +1,7 @@
 {
- "note": "Pack v5 (0.2.8) — all 19 workflows LIVE, all text in English. 0.2.8 additions: Evening Brightness (time 18:00 -> direct set_brightness 25), Music Volume Guard (app_group_used 'Music' -> direct set_volume 25; never fires until a 'Music' group exists), Notification Watcher sample (notification_posted, OFF by default). Intruder Alert now also captures a front-camera photo (threshold in Settings, default 2).",
+ "note": "Pack v6 (0.2.9) — all 20 workflows LIVE, all text in English. 0.2.9 addition: WhatsApp Auto Reply (sample) — notification_posted on com.whatsapp with keyword Hi and the new auto_reply direct action; OFF by default, and switching it ON asks for explicit confirmation because it replies from the user's own WhatsApp account. Earlier: Evening Brightness (time 18:00 -> direct set_brightness 25), Music Volume Guard (app_group_used Music -> direct set_volume 25; never fires until a Music group exists), Notification Watcher sample (notification_posted, OFF by default). Intruder Alert captures a front-camera photo (threshold in Settings, default 2).",
  "pack": "my-care-pack",
- "version": 5,
+ "version": 6,
  "workflows": [
   {
    "bot_type": "notification",
@@ -536,6 +536,35 @@
    "settings": {},
    "steps": [],
    "trigger": {
+    "type": "notification_posted"
+   }
+  },
+  {
+   "action": {
+    "text": "Hi! Thanks for your message. I am a bit busy right now — I will reply properly soon. 🙏",
+    "type": "auto_reply"
+   },
+   "bot_type": "notification",
+   "buttons": [
+    {
+     "action": "skip",
+     "label": "OK"
+    }
+   ],
+   "enabled": false,
+   "id": "whatsapp_auto_reply_sample",
+   "message": {
+    "text": "SAMPLE — OFF by default, Boss. When you switch it ON, My Care automatically replies to any WhatsApp notification containing \"Hi\", straight from your own WhatsApp account. Turn it on only if you really want automatic replies; the 5-minute cooldown keeps it from replying in bursts. (If a particular notification has no Reply button, you get this notification instead.)",
+    "title": "Auto-replied on WhatsApp 💬"
+   },
+   "name": "WhatsApp Auto Reply (sample)",
+   "settings": {
+    "cooldown_minutes": 5
+   },
+   "steps": [],
+   "trigger": {
+    "keyword": "Hi",
+    "packages": "com.whatsapp",
     "type": "notification_posted"
    }
   }

@@ -12,9 +12,11 @@ import com.spdev22.mycare.data.CareSettings
 import com.spdev22.mycare.data.GeminiClient
 import com.spdev22.mycare.data.LogStore
 import com.spdev22.mycare.data.UserWorkflowStore
+import com.spdev22.mycare.data.WorkflowPrefs
 import com.spdev22.mycare.engine.WorkflowEngine
 import com.spdev22.mycare.notify.DailyScheduler
 import com.spdev22.mycare.settings.SettingsActivity
+import com.spdev22.mycare.setup.AutoReplyConfirm
 import com.spdev22.mycare.setup.WorkflowPermissions
 
 /**
@@ -128,14 +130,8 @@ class AiWorkflowActivity : Activity() {
             }
             is GeminiClient.Result.Success -> {
                 UserWorkflowStore.save(this, result.workflowJson)
-                // Time-trigger ho to roz wala alarm turant set karo;
-                // baaki triggers CareService apne aap utha lega
-                // (version badhte hi uski list taaza ho jaati hai).
                 val wf = WorkflowEngine.loadPack(this)
                     .firstOrNull { it.id == result.workflowJson.optString("id") }
-                if (wf != null && wf.triggerType == "time") {
-                    DailyScheduler.scheduleOne(this, wf)
-                }
                 LogStore.log(
                     this,
                     "AI workflow created: '${result.name}' " +
@@ -147,10 +143,43 @@ class AiWorkflowActivity : Activity() {
                     "it off, edit it, or delete it."
                 descInput.text.clear()
                 toast("Workflow created: ${result.name} 🎉")
-                // 0.2.8: the new workflow lands ENABLED — check its
-                // permissions right away and offer the missing ones
-                if (wf != null && wf.enabled) {
-                    WorkflowPermissions.promptIfMissing(this, wf)
+                // The "goes live" finishing steps: a time trigger's
+                // daily alarm is set right away (other triggers are
+                // picked up by CareService / the listener on their
+                // own), and 0.2.8's permission-on-enable prompt runs.
+                val finishEnable = {
+                    if (wf != null && wf.triggerType == "time") {
+                        DailyScheduler.scheduleOne(this, wf)
+                    }
+                    if (wf != null && wf.enabled) {
+                        WorkflowPermissions.promptIfMissing(this, wf)
+                    }
+                }
+                if (wf != null && wf.enabled && AutoReplyConfirm.appliesTo(wf)) {
+                    // 0.2.9: an auto-reply workflow lands ENABLED —
+                    // ask explicitly first. If Boss declines, the
+                    // workflow is kept but forced OFF, so it can
+                    // never reply silently; he can switch it on
+                    // later from the Workflows tab (same question).
+                    AutoReplyConfirm.confirmIfNeeded(
+                        this, wf,
+                        onCancelled = {
+                            WorkflowPrefs.setEnabled(this, wf.id, false)
+                            LogStore.log(
+                                this,
+                                "AI auto-reply workflow [${wf.id}] kept OFF — " +
+                                    "auto-reply was not confirmed"
+                            )
+                            statusView.text = "✅ Created: '${result.name}' — " +
+                                "but it is OFF, because auto-reply was not " +
+                                "confirmed. Turn it on from the 'Workflows' " +
+                                "tab whenever you are ready."
+                            toast("Saved, but OFF — auto-reply not confirmed")
+                        },
+                        onConfirmed = { finishEnable() }
+                    )
+                } else {
+                    finishEnable()
                 }
             }
         }

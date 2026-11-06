@@ -19,6 +19,7 @@ import com.spdev22.mycare.data.WorkflowPrefs
 import com.spdev22.mycare.engine.Workflow
 import com.spdev22.mycare.engine.WorkflowEngine
 import com.spdev22.mycare.notify.DailyScheduler
+import com.spdev22.mycare.setup.AutoReplyConfirm
 import com.spdev22.mycare.setup.WorkflowPermissions
 
 /**
@@ -274,28 +275,44 @@ class WorkflowEditActivity : Activity() {
             } else {
                 null
             }
-        WorkflowOverrides.save(
-            this, packWf.id,
-            title = if (newTitle != packWf.title) newTitle else null,
-            text = if (newText != packWf.text) newText else null,
-            time = timeOvr,
-            trigger = trigOvr,
-            settings = setOvr
-        )
-        if (packWf.triggerType == "time") {
-            // Samay/limits taaze hon — roz wala alarm nayi sthiti se set karo
-            DailyScheduler.scheduleOne(this, packWf)
+        val doSave = {
+            WorkflowOverrides.save(
+                this, packWf.id,
+                title = if (newTitle != packWf.title) newTitle else null,
+                text = if (newText != packWf.text) newText else null,
+                time = timeOvr,
+                trigger = trigOvr,
+                settings = setOvr
+            )
+            if (packWf.triggerType == "time") {
+                // Samay/limits taaze hon — roz wala alarm nayi sthiti se set karo
+                DailyScheduler.scheduleOne(this, packWf)
+            }
+            LogStore.log(this, "Workflow [${packWf.id}] edit saved (Editor-lite)")
+            toast("Saved, Boss ✅")
+            // 0.2.8: permission-on-enable also applies to the Editor —
+            // if this workflow is ON and permissions are missing, offer
+            // them now; the screen finishes when the prompt is dismissed
+            // (or immediately when nothing is missing).
+            if (WorkflowPrefs.isEnabled(this, packWf)) {
+                WorkflowPermissions.promptIfMissing(this, packWf) { finish() }
+            } else {
+                finish()
+            }
         }
-        LogStore.log(this, "Workflow [${packWf.id}] edit saved (Editor-lite)")
-        toast("Saved, Boss ✅")
-        // 0.2.8: permission-on-enable also applies to the Editor —
-        // if this workflow is ON and permissions are missing, offer
-        // them now; the screen finishes when the prompt is dismissed
-        // (or immediately when nothing is missing).
-        if (WorkflowPrefs.isEnabled(this, packWf)) {
-            WorkflowPermissions.promptIfMissing(this, packWf) { finish() }
+        // 0.2.9: saving an ENABLED auto-reply workflow re-confirms
+        // auto-reply first — the edits are written only on confirm;
+        // on Cancel nothing changes and the screen stays open.
+        if (AutoReplyConfirm.appliesTo(packWf) &&
+            WorkflowPrefs.isEnabled(this, packWf)
+        ) {
+            AutoReplyConfirm.confirmIfNeeded(
+                this, packWf,
+                onCancelled = { toast("Not saved — auto-reply was not confirmed") },
+                onConfirmed = { doSave() }
+            )
         } else {
-            finish()
+            doSave()
         }
     }
 

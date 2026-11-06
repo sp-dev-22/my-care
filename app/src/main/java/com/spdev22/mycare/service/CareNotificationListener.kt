@@ -11,6 +11,7 @@ import com.spdev22.mycare.data.LogStore
 import com.spdev22.mycare.data.UserWorkflowStore
 import com.spdev22.mycare.data.WorkflowOverrides
 import com.spdev22.mycare.data.WorkflowPrefs
+import com.spdev22.mycare.engine.DirectActions
 import com.spdev22.mycare.engine.HisaabBuilder
 import com.spdev22.mycare.engine.Workflow
 import com.spdev22.mycare.engine.WorkflowEngine
@@ -40,6 +41,15 @@ import com.spdev22.mycare.notify.NotifyFactory
  * workflow id likhta hai. Spam se bachne ke liye har workflow par
  * chhota sa cooldown hai (settings "cooldown_minutes", default
  * 1 minute) — ek hi workflow baar-baar nahi bajega.
+ *
+ * 0.2.9: workflow ka direct action `auto_reply` ho to notification
+ * post karne ke bajaay USI notification ke Reply action se jawab
+ * bhej diya jata hai (DirectActions.executeAutoReply) — user ke
+ * apne account se, usi app me. Reply text aur aayi hui message ka
+ * content Logs me KABHI nahi likhta; sirf app label + workflow id
+ * + nateeja. Reply action na mile to purana raasta (apni
+ * notification) hi fallback hai. Cooldown auto-reply par bhi utna
+ * hi sakht hai — stamp reply koshish se pehle lagta hai.
  */
 class CareNotificationListener : NotificationListenerService() {
 
@@ -108,10 +118,30 @@ class CareNotificationListener : NotificationListenerService() {
 
             val appLabel = HisaabBuilder.appLabel(this, pkg)
             val textVar = title.ifEmpty { body }
-            NotifyFactory.postWorkflow(
-                this, wf,
-                mapOf("app" to appLabel, "text" to textVar)
-            )
+            val vars = mapOf("app" to appLabel, "text" to textVar)
+
+            // 0.2.9: auto_reply — the workflow's direct action IS
+            // the event: reply on THIS notification, from the
+            // user's own account in that app, through its own
+            // Reply action. Cooldown above has already been applied,
+            // so auto-reply can never fire more often than the
+            // workflow's own limit. On success our notification is
+            // NOT posted (the reply itself is the record, and it is
+            // logged). When this notification has no reply action,
+            // DirectActions logs why and we fall back to posting
+            // the workflow's notification exactly as before.
+            if (DirectActions.isAutoReply(wf)) {
+                val sent = DirectActions.executeAutoReply(this, sbn, wf, appLabel, vars)
+                if (sent) {
+                    LogStore.log(
+                        this,
+                        "notification_posted FIRE [${wf.id}] — $appLabel (auto-replied)"
+                    )
+                    continue
+                }
+            }
+
+            NotifyFactory.postWorkflow(this, wf, vars)
             // Log me SIRF app label + workflow id — text kabhi nahi
             LogStore.log(this, "notification_posted FIRE [${wf.id}] — $appLabel")
         }

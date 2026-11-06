@@ -82,6 +82,11 @@
             android:name=".ui.RunningServicesActivity"
             android:exported="false" />
 
+        <!-- 0.2.9: Backup / Restore (SAF export/import) -->
+        <activity
+            android:name=".ui.BackupRestoreActivity"
+            android:exported="false" />
+
         <activity
             android:name=".ui.CapturesActivity"
             android:exported="false" />

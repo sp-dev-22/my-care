@@ -8,6 +8,7 @@ import android.widget.LinearLayout
 import com.spdev22.mycare.data.CareSettings
 import com.spdev22.mycare.data.IntruderCaptures
 import com.spdev22.mycare.data.WorkflowPrefs
+import com.spdev22.mycare.engine.DirectActions
 import com.spdev22.mycare.engine.Workflow
 import com.spdev22.mycare.engine.WorkflowEngine
 import com.spdev22.mycare.notify.DailyScheduler
@@ -166,6 +167,32 @@ class RunningServicesActivity : Activity() {
                         ". Grant Notification Access in the Setup Wizard."
                 else ->
                     "⚪ Not connected, and no notification-posted workflow is ON — nothing is missing."
+            }
+        )
+
+        // ---- Auto-reply (0.2.9 consistency upgrade) ----
+        // Count + state of every ON workflow whose direct action is
+        // auto_reply. These reply from Boss's own accounts, so a
+        // silent failure here matters more than anywhere else: if
+        // any is ON while the listener is not connected, that is a
+        // hard ❌, never a quiet line.
+        val autoReplyOn = onWorkflows.filter { DirectActions.isAutoReply(it) }
+        row(
+            root, "Auto-reply",
+            when {
+                autoReplyOn.isEmpty() ->
+                    "⚪ No auto-reply workflow is ON — nothing is being " +
+                        "replied to automatically."
+                listenerOn ->
+                    "✅ ${autoReplyOn.size} auto-reply workflow(s) ON — " +
+                        "replies go out automatically via: " +
+                        autoReplyOn.joinToString(", ") { it.name } + "."
+                else ->
+                    "❌ ${autoReplyOn.size} auto-reply workflow(s) ON but the " +
+                        "notification listener is NOT connected — auto-reply " +
+                        "cannot work: " +
+                        autoReplyOn.joinToString(", ") { it.name } +
+                        ". Grant Notification Access in the Setup Wizard."
             }
         )
 

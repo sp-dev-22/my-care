@@ -30,6 +30,10 @@ import com.spdev22.mycare.ui.UiKit
  *   usage-based triggers / cache_over / unused_apps -> Usage Access
  *   screenshot_taken        -> Photos / Media read
  *   notification_posted     -> Notification Access
+ *   auto_reply (direct)     -> Notification Access (0.2.9 — the reply
+ *                              travels through the listener, so an
+ *                              auto-reply workflow is listed here
+ *                              explicitly, not only via its trigger)
  *   failed_unlock           -> Device Admin + Camera (for the photo)
  *   contact_saved           -> Contacts
  *   time                    -> Exact Alarm (Android 12+, where it applies)
@@ -208,6 +212,10 @@ object WorkflowPermissions {
             "time" -> add(exactAlarm())
         }
         if (wf.primaryAction == "set_brightness") add(writeSettings())
+        // 0.2.9: auto_reply rides on the notification listener —
+        // named explicitly so the requirement (and its ❌ warning)
+        // survives even if the trigger mapping ever changes.
+        if (wf.primaryAction == "auto_reply") add(notificationAccess())
         for (btn in wf.buttons) {
             when (btn.action) {
                 "set_brightness" -> add(writeSettings())

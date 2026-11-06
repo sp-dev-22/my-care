@@ -31,6 +31,11 @@ import java.net.URLEncoder
  * notification_posted (packages + keyword STRING params, validation
  * loop inhe alag se sambhalta hai) aur naye actions
  * set_volume/set_brightness (percent zaroori) whitelist me jude.
+ *
+ * 0.2.9: naya direct action `auto_reply` — SIRF notification_posted
+ * ke saath, "text" zaroori, 300 akshar tak kata hua. Prompt me uske
+ * niyam (packages + keyword filter ki sakht salah, cooldown) aur
+ * Example E (WhatsApp auto-reply) jode gaye.
  */
 object GeminiClient {
 
@@ -237,7 +242,7 @@ OUTPUT RULE (STRICT): Reply with ONLY one JSON object. No markdown fences, no ex
 - "name": short human name for the workflow (max 60 characters). ENGLISH ONLY.
 - "enabled": always true.
 - "steps": always [].
-- OPTIONAL top-level "action": a DIRECT action that runs IMMEDIATELY when the workflow fires (the notification is still posted as the record). Shape: {"type":"set_brightness","percent":25} or {"type":"set_volume","percent":25}. ONLY these two types, percent 0-100 REQUIRED. Use it when the user wants the thing DONE automatically (e.g. "dim the screen at 6 pm", "set volume to 25% when a music app opens") instead of just being asked. Omit the field otherwise.
+- OPTIONAL top-level "action": a DIRECT action that runs IMMEDIATELY when the workflow fires (the notification is still posted as the record). Shapes: {"type":"set_brightness","percent":25} or {"type":"set_volume","percent":25} (percent 0-100 REQUIRED for these two), or — ONLY with the "notification_posted" trigger — {"type":"auto_reply","text":"the reply message"} (see the note in trigger 14 below). Use a direct action when the user wants the thing DONE automatically (e.g. "dim the screen at 6 pm", "set volume to 25% when a music app opens", "reply automatically on WhatsApp") instead of just being asked. Omit the field otherwise.
 
 === 2. TRIGGERS (use ONLY these 15 types; copy names exactly) ===
 1. "time" — fires daily at a fixed time. Params: {"time":"HH:MM"} 24-hour, REQUIRED (e.g. "08:00", "22:30").
@@ -254,6 +259,7 @@ OUTPUT RULE (STRICT): Reply with ONLY one JSON object. No markdown fences, no ex
 12. "unused_apps" — apps not used for many days. NO trigger params; the limit goes in settings: {"days": number 1-365}. Variables: {app}, {count} (how many such apps).
 13. "failed_unlock" — wrong unlock attempts reach the user's threshold (default 2) within 10 minutes (possible intruder). No params. The app also captures a front-camera photo for the alert when it can.
 14. "notification_posted" — a notification arrives from another app. Params (both optional strings): {"packages": "com.whatsapp,com.google.android.gm", "keyword": "OTP"}. "packages" = comma-separated Android package names; only those apps' notifications fire it (omit = all apps). "keyword" = a word that must appear in the notification title/text, case-insensitive (omit = any notification from those apps). Variables: {app} (sending app's name), {text} (the notification's title). NOTE: this trigger needs the user to grant "Notification Access" in the app's Setup Wizard — still generate it when the user asks for notification-based workflows.
+   AUTO-REPLY: this is the ONLY trigger that may carry the direct action {"type":"auto_reply","text":"..."}. With it, the app does not just notify Boss — it SENDS "text" as a reply to that very notification, from Boss's own account in that app (through the app's own Reply action). Rules: "text" is REQUIRED, polite and short (max 300 chars). ALWAYS pair auto_reply with a "packages" filter AND, whenever the user gives any hint of one, a "keyword" filter — an unfiltered auto-reply would answer EVERY notification on the phone, which is almost never what the user wants. Also put "cooldown_minutes" (e.g. 5) in settings so it cannot reply in rapid bursts. The message title/text then describe what was auto-replied (they are only posted if that particular notification turns out to have no Reply action). If the user only wants to be NOTIFIED about notifications (no reply), omit the action as usual.
 
 15. "app_group_used" — an app from a named App Group is used. Params: {"group":"Music"} REQUIRED (the group's exact name — the user creates groups in the app; if the group does not exist yet, the workflow simply never fires until he creates it), {"minutes": number 0-720} OPTIONAL (0 or omitted = fire as soon as the app opens; N = after N minutes of use). Variables: {app}, {minutes}. PERFECT partner for a direct action, e.g. group "Music" + action set_volume 25.
 
@@ -295,7 +301,7 @@ Use ONLY the variables listed for that trigger in section 2: {app}, {minutes}, {
 - The title/text must make sense with the trigger and use its variables where natural.
 
 === 7b. PERMISSION MAP (the app checks these itself — you only need the right shape) ===
-The app automatically works out which permissions a workflow needs from its trigger and actions, and asks the user for the missing ones the moment the workflow is switched ON — you never write permissions into the JSON. For your awareness: usage triggers (app_hopping, single_app_over, continuous_use_over, app_group_used, cache_over, unused_apps) need Usage Access; screenshot_taken needs Photos/Media; notification_posted needs Notification Access; failed_unlock needs Device Admin + Camera; contact_saved needs Contacts; time needs Exact Alarms; set_brightness needs the system-settings grant; go_home needs Accessibility; lock_phone needs Device Admin; popup needs Display-over-apps. So: generate the workflow the user asked for — the app handles the permission side.
+The app automatically works out which permissions a workflow needs from its trigger and actions, and asks the user for the missing ones the moment the workflow is switched ON — you never write permissions into the JSON. For your awareness: usage triggers (app_hopping, single_app_over, continuous_use_over, app_group_used, cache_over, unused_apps) need Usage Access; screenshot_taken needs Photos/Media; notification_posted needs Notification Access (an auto_reply action needs it too — the reply travels through the notification listener); failed_unlock needs Device Admin + Camera; contact_saved needs Contacts; time needs Exact Alarms; set_brightness needs the system-settings grant; go_home needs Accessibility; lock_phone needs Device Admin; popup needs Display-over-apps. So: generate the workflow the user asked for — the app handles the permission side.
 
 === 8. EXAMPLES (follow this quality and shape) ===
 
@@ -310,6 +316,9 @@ Example C — music volume safety with a set_volume BUTTON (asks first):
 
 Example D — DIRECT action (acts immediately, no tap needed):
 {"id":"evening_dim","name":"Evening Dim","enabled":true,"bot_type":"notification","trigger":{"type":"time","time":"18:00"},"message":{"title":"Evening brightness 🌆","text":"It is 6 PM, Boss — screen brightness has been set to 25% automatically to keep your eyes comfortable."},"buttons":[{"label":"OK","action":"skip"}],"steps":[],"settings":{},"action":{"type":"set_brightness","percent":25}}
+
+Example E — AUTO-REPLY on WhatsApp (notification_posted + auto_reply; note the packages AND keyword filters and the cooldown):
+{"id":"whatsapp_hi_auto_reply","name":"WhatsApp Auto Reply","enabled":true,"bot_type":"notification","trigger":{"type":"notification_posted","packages":"com.whatsapp","keyword":"Hi"},"message":{"title":"Auto-replied on WhatsApp 💬","text":"Boss, My Care just replied automatically to a WhatsApp message containing 'Hi'."},"buttons":[{"label":"OK","action":"skip"}],"steps":[],"settings":{"cooldown_minutes":5},"action":{"type":"auto_reply","text":"Hi! Thanks for your message. I am a bit busy right now — I will reply properly soon. 🙏"}}
 
 === 9. USER'S REQUEST ===
 "$description"
@@ -458,15 +467,29 @@ Example D — DIRECT action (acts immediately, no tap needed):
         // {"type":"set_brightness"|"set_volume","percent":0-100} —
         // runs immediately when the workflow fires. Anything else
         // (set_alarm and friends) is dropped, never trusted.
+        // --- 0.2.9: "auto_reply" — valid ONLY with the
+        // notification_posted trigger, and its reply "text" is
+        // REQUIRED (trimmed, max 300 chars). Any other pairing is
+        // dropped the same way, never trusted.
         val actionOut: JSONObject? = run {
             val aRaw = raw.optJSONObject("action") ?: return@run null
-            val aType = aRaw.optString("type").trim()
-            if (aType != "set_brightness" && aType != "set_volume") return@run null
-            val pct = numeric(aRaw.opt("percent")) ?: numeric(aRaw.opt("value"))
-                ?: return@run null
-            JSONObject()
-                .put("type", aType)
-                .put("percent", pct.coerceIn(0, 100))
+            when (aRaw.optString("type").trim()) {
+                "set_brightness", "set_volume" -> {
+                    val pct = numeric(aRaw.opt("percent"))
+                        ?: numeric(aRaw.opt("value"))
+                        ?: return@run null
+                    JSONObject()
+                        .put("type", aRaw.optString("type").trim())
+                        .put("percent", pct.coerceIn(0, 100))
+                }
+                "auto_reply" -> {
+                    if (type != "notification_posted") return@run null
+                    val txt = aRaw.optString("text").trim().take(300)
+                    if (txt.isEmpty()) return@run null
+                    JSONObject().put("type", "auto_reply").put("text", txt)
+                }
+                else -> null
+            }
         }
 
         // --- id: surakshit + unique, "ai_" shuruaat ke saath ---
