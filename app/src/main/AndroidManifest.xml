@@ -25,6 +25,13 @@
          user ke "Banwao" dabane par hi, uski apni API key se, network
          chalta hai. Baaki poora app hamesha ki tarah offline hai. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- 0.2.6: set_volume action ke liye — AudioManager se media
+         volume badalne ki ijaazat (koi khaas grant nahi chahiye). -->
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <!-- 0.2.6: set_brightness action ke liye — yeh SYSTEM-LEVEL grant
+         hai; declare karna zaroori hai, asal ijaazat user Setup Wizard
+         se "Modify system settings" wali screen par deta hai. -->
+    <uses-permission android:name="android.permission.WRITE_SETTINGS" />
 
     <application
         android:allowBackup="false"
@@ -110,6 +117,22 @@
             <meta-data
                 android:name="android.accessibilityservice"
                 android:resource="@xml/accessibility_service_config" />
+        </service>
+
+        <!-- 0.2.6: notification_posted trigger ki jaan — doosre apps ki
+             notifications SUNNE wali service. System-level grant
+             (Notification Access) user Setup Wizard se deta hai; grant
+             na ho to system isse kabhi jodta hi nahi (inert rehti hai).
+             Service sirf matching workflow FIRE karti hai — kisi
+             notification ka text store nahi hota. -->
+        <service
+            android:name=".service.CareNotificationListener"
+            android:exported="false"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
         </service>
 
         <receiver

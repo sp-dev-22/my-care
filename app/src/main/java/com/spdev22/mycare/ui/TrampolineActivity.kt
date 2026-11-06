@@ -6,6 +6,7 @@ import android.app.PendingIntent
 import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.content.Intent
+import android.media.AudioManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -41,6 +42,10 @@ import org.json.JSONObject
  * nahi tha aur user ka saaf directive hai: naya action "open_clock"
  * sirf Clock app KHOLTA hai (Settings wala chuna hua Clock app, warna
  * system ki Alarms screen / khoj), alarm user khud set karta hai.
+ * 0.2.6: do naye system actions — "set_volume" (AudioManager se media
+ * volume, args percent) aur "set_brightness" (Settings.System se
+ * screen brightness, args percent; WRITE_SETTINGS grant na ho to
+ * imaandaar suchna, chup-chaap fail nahi).
  */
 class TrampolineActivity : Activity() {
 
@@ -181,6 +186,19 @@ class TrampolineActivity : Activity() {
                 // alarm user khud set karega (set_alarm hata diya gaya)
                 if (notifId > 0) NotifyFactory.cancel(this, notifId)
                 openClockApp()
+            }
+
+            "set_volume" -> {
+                // 0.2.6: media volume seedha AudioManager se set karo
+                if (notifId > 0) NotifyFactory.cancel(this, notifId)
+                setMediaVolume(args["percent"]?.toIntOrNull())
+            }
+
+            "set_brightness" -> {
+                // 0.2.6: screen brightness Settings.System se — iske
+                // liye WRITE_SETTINGS wala system grant chahiye
+                if (notifId > 0) NotifyFactory.cancel(this, notifId)
+                setBrightness(args["percent"]?.toIntOrNull())
             }
 
             "jump" -> {
@@ -473,6 +491,69 @@ class TrampolineActivity : Activity() {
         }
         toast("Clock app nahi mila, Boss — Settings me apna Clock app chun dijiye")
         LogStore.log(this, "Clock open FAIL: koi clock app nahi mila")
+    }
+
+    /**
+     * 0.2.6: media (music/video) volume percent ke hisaab se set karo.
+     * AudioManager ka index 0..max hota hai — percent usi par map hota
+     * hai. MODIFY_AUDIO_SETTINGS chahiye (manifest me hai; koi khaas
+     * grant nahi lagta). MEDIA stream isliye ki care workflows ka
+     * matlab music/video ki awaaz se hai, ringtone se nahi.
+     */
+    private fun setMediaVolume(percentRaw: Int?) {
+        val percent = (percentRaw ?: 50).coerceIn(0, 100)
+        try {
+            val am = getSystemService(AudioManager::class.java)
+            if (am == null) {
+                toast("Volume service nahi mili, Boss")
+                LogStore.log(this, "set_volume FAIL: AudioManager null")
+                return
+            }
+            val max = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+            val index = Math.round(percent / 100.0 * max).toInt().coerceIn(0, max)
+            am.setStreamVolume(AudioManager.STREAM_MUSIC, index, 0)
+            LogStore.log(this, "Volume set: $percent% (index $index/$max)")
+        } catch (e: Exception) {
+            toast("Volume set nahi ho paya, Boss")
+            LogStore.log(this, "set_volume FAIL: ${e.message}")
+        }
+    }
+
+    /**
+     * 0.2.6: screen brightness percent ke hisaab se set karo.
+     * Settings.System.WRITE_SETTINGS ek SYSTEM-LEVEL grant hai —
+     * user Setup Wizard se deta hai. Grant na ho to chup-chaap fail
+     * hone ke bajaaye saaf suchna (notification + log) di jati hai.
+     */
+    private fun setBrightness(percentRaw: Int?) {
+        val percent = (percentRaw ?: 50).coerceIn(0, 100)
+        if (!Settings.System.canWrite(this)) {
+            NotifyFactory.postPlain(
+                this, NotifyFactory.notifIdFor("brightness_permission") + 7,
+                "Brightness ke liye permission chahiye ⚠️",
+                "Boss, brightness badalne ki system permission abhi mili " +
+                    "nahi hai. My Care -> Setup Wizard -> 'System Settings " +
+                    "(Brightness)' se de dijiye — phir yeh button kaam karega."
+            )
+            LogStore.log(this, "set_brightness SKIP: WRITE_SETTINGS grant nahi hai")
+            return
+        }
+        try {
+            val resolver = contentResolver
+            Settings.System.putInt(
+                resolver,
+                Settings.System.SCREEN_BRIGHTNESS_MODE,
+                Settings.System.SCREEN_BRIGHTNESS_MODE_MANUAL
+            )
+            val value = Math.round(percent / 100.0 * 255).toInt().coerceIn(1, 255)
+            Settings.System.putInt(
+                resolver, Settings.System.SCREEN_BRIGHTNESS, value
+            )
+            LogStore.log(this, "Brightness set: $percent% (value $value/255)")
+        } catch (e: Exception) {
+            toast("Brightness set nahi ho payi, Boss")
+            LogStore.log(this, "set_brightness FAIL: ${e.message}")
+        }
     }
 
     private fun parseArgs(json: String?): Map<String, String> {

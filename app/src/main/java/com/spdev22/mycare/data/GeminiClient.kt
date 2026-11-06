@@ -24,6 +24,13 @@ import java.net.URLEncoder
  * kar sakta hai jo engine asal me chalata hai. 'jump'/'delete_file'
  * jaan-boojh kar AI-set se bahar hain — woh screenshot flow ke
  * bandhe hue hain, AI workflow ke haath me dena sahi nahi.
+ *
+ * 0.2.6: prompt ab POORA Format-v1 manual hai — har trigger, param,
+ * action aur variable jo engine asal me chalata hai (aur manaahi
+ * wali cheezein saaf taur par band). Naya trigger
+ * notification_posted (packages + keyword STRING params, validation
+ * loop inhe alag se sambhalta hai) aur naye actions
+ * set_volume/set_brightness (percent zaroori) whitelist me jude.
  */
 object GeminiClient {
 
@@ -33,19 +40,24 @@ object GeminiClient {
     }
 
     // Engine asal me jo trigger types chalata hai (CareService +
-    // DailyScheduler + observers + DeviceAdmin) — iske bahar manaahi.
+    // DailyScheduler + observers + DeviceAdmin + 0.2.6 se
+    // NotificationListener) — iske bahar manaahi.
     private val TRIGGER_TYPES = setOf(
         "first_unlock", "app_hopping", "single_app_over",
         "continuous_use_over", "time", "interval", "battery_level",
         "screenshot_taken", "contact_saved", "app_installed",
-        "cache_over", "unused_apps", "failed_unlock"
+        "cache_over", "unused_apps", "failed_unlock",
+        "notification_posted"
     )
 
     // AI ke liye khule button actions (engine ke implemented set ka
     // surakshit hissa — jump/delete_file screenshot-flow bandhe hain).
+    // 0.2.6: set_volume (AudioManager) aur set_brightness
+    // (Settings.System) bhi khule — dono ke liye percent zaroori hai.
     private val AI_ACTIONS = setOf(
         "open_app", "open_url", "open_app_info", "open_whatsapp_chat",
-        "lock_phone", "go_home", "open_clock", "skip"
+        "lock_phone", "go_home", "open_clock", "skip",
+        "set_volume", "set_brightness"
     )
 
     private val SLOTS = setOf("music", "video", "chat", "clock")
@@ -61,6 +73,10 @@ object GeminiClient {
         "battery_level" -> setOf("level", "state")
         "single_app_over", "continuous_use_over" -> setOf("minutes")
         "app_hopping" -> setOf("apps", "seconds", "window_minutes")
+        // 0.2.6: dono STRING params hain — validate loop inhe alag
+        // se sambhalta hai (packages = comma-wali package list,
+        // keyword = ek shabd/vakyaansh)
+        "notification_posted" -> setOf("packages", "keyword")
         else -> emptySet()
     }
 
@@ -197,24 +213,92 @@ object GeminiClient {
     }
 
     // ---------------- prompt ----------------
+    //
+    // 0.2.6: prompt ab ek POORA manual hai — jo kuch engine asal
+    // me chalata hai (har trigger, har param, har action, har
+    // variable) wahi yahan likha hai, taaki AI poore engine ka
+    // sahi istemal kare. Koi bhi cheez jo engine me nahi hai
+    // (set_alarm, jump, {group} var...) yahan jaan-boojh kar
+    // "manaahi" me saaf likhi hai — AI use invent na kare.
 
     private fun buildPrompt(description: String): String {
         return """
-You are a workflow generator for the Android care app "My Care". The user describes a care workflow in Hindi, Hinglish or English. Reply with ONLY one JSON object — no markdown fences, no explanation, no extra text.
+You are the workflow generator of "My Care", an Android care app. The user (called "Boss") describes a care workflow in Hindi, Hinglish or English. Convert it into ONE workflow record in "Workflow Format v1" JSON.
 
-The JSON object MUST have exactly this shape (Workflow Format v1):
-{"id":"snake_case_english_id","name":"Short Name","enabled":true,"bot_type":"notification","trigger":{"type":"time","time":"22:00"},"message":{"title":"...","text":"..."},"buttons":[{"label":"...","action":"skip"}],"steps":[],"settings":{}}
+OUTPUT RULE (STRICT): Reply with ONLY one JSON object. No markdown fences, no explanation, no greeting, no extra text before or after. If the description is impossible with the triggers/actions listed below, still output the CLOSEST possible workflow using only what exists.
 
-Rules:
-- trigger.type must be ONE of: time, interval, battery_level, single_app_over, continuous_use_over, app_hopping, first_unlock, screenshot_taken, contact_saved, app_installed, cache_over, unused_apps, failed_unlock.
-- Allowed trigger params only: time -> {"time":"HH:MM"} (24-hour); interval -> {"hours":number}; battery_level -> {"level":1-100,"state":"charging" or "discharging"}; single_app_over / continuous_use_over -> {"minutes":number}; app_hopping -> {"apps":number,"seconds":number,"window_minutes":number}; all other types -> no params.
-- Button "action" must be ONE of: open_app (args {"slot":"music"|"video"|"chat"|"clock"} or {"package":"com.example.app"}), open_url (args {"url":"https://..."}), open_app_info (args {"package":"..."}), open_whatsapp_chat, lock_phone, go_home, open_clock, skip. Maximum 3 buttons (4 only if bot_type is "popup").
-- "settings" may only contain numeric keys from: minutes, hours, level, cache_mb, days, cooldown_minutes, after_minutes. Use it to mirror the main limit of the trigger when natural.
-- "steps" must be [] and do NOT include any top-level "action" field.
-- message.title and message.text must be in friendly Hinglish (Roman Hindi mixed with English words), respectful "aap" tone, and address the user as "Boss".
-- "name" is a short name for the workflow. "id" uses only lowercase english letters, digits and underscores.
+=== 1. JSON SHAPE (exactly these fields) ===
+{"id":"snake_case_english","name":"Short Name","enabled":true,"bot_type":"notification","trigger":{"type":"..."},"message":{"title":"...","text":"..."},"buttons":[{"label":"...","action":"...","args":{}}],"steps":[],"settings":{}}
+- "id": short snake_case English suggestion (lowercase letters, digits, underscores). The app automatically adds an "ai_" prefix and makes it unique — do not add prefixes yourself.
+- "name": short human name for the workflow (max 60 characters). May be English or Hinglish.
+- "enabled": always true.
+- "steps": always []. NEVER add a top-level "action" field.
 
-User's workflow description:
+=== 2. TRIGGERS (use ONLY these 14 types; copy names exactly) ===
+1. "time" — fires daily at a fixed time. Params: {"time":"HH:MM"} 24-hour, REQUIRED (e.g. "08:00", "22:30").
+2. "interval" — fires every N hours. Params: {"hours": number 1-24}. (The app stays quiet between 23:00 and 07:00 for interval workflows.)
+3. "battery_level" — Params: {"level": number 1-100 (REQUIRED), "state": "charging" or "discharging"}. With "charging": fires once when charge reaches the level (use for full-charge alerts, e.g. level 95). With "discharging": fires when battery drops to the level (use for low-battery warnings, e.g. level 20). Variable: {percent}.
+4. "single_app_over" — one single app used continuously for N minutes. Params: {"minutes": number 1-720}. Variables: {app}, {minutes}.
+5. "continuous_use_over" — the phone itself used continuously for N minutes without a break. Params: {"minutes": number 1-720}. Variable: {minutes}.
+6. "app_hopping" — boredom pattern: many apps opened one after another, none used properly. Params: {"apps": number 2-10 (how many different apps), "seconds": number 1-600 (each app used LESS than this), "window_minutes": number 1-60 (within this window)}. Also put "cooldown_minutes" in settings (see section 5).
+7. "first_unlock" — the first phone unlock of the day. No params.
+8. "screenshot_taken" — a new screenshot appears in the Screenshots folder. No params.
+9. "contact_saved" — a new contact is saved. No params. Variable: {name} (the new contact's name). Note: the app automatically adds its own WhatsApp button when a number exists; your buttons come after it.
+10. "app_installed" — a new app is installed. No params.
+11. "cache_over" — some app's cache grows too big. NO trigger params; the limit goes in settings: {"cache_mb": number 10-5000}. Variables: {app}, {cache} (e.g. "512 MB"). Note: for this trigger the app shows its own fixed notification with an App Info button — keep your buttons minimal (one skip button is enough).
+12. "unused_apps" — apps not used for many days. NO trigger params; the limit goes in settings: {"days": number 1-365}. Variables: {app}, {count} (how many such apps).
+13. "failed_unlock" — 2 wrong unlock attempts within 10 minutes (possible intruder). No params.
+14. "notification_posted" — a notification arrives from another app. Params (both optional strings): {"packages": "com.whatsapp,com.google.android.gm", "keyword": "OTP"}. "packages" = comma-separated Android package names; only those apps' notifications fire it (omit = all apps). "keyword" = a word that must appear in the notification title/text, case-insensitive (omit = any notification from those apps). Variables: {app} (sending app's name), {text} (the notification's title). NOTE: this trigger needs the user to grant "Notification Access" in the app's Setup Wizard — still generate it when the user asks for notification-based workflows.
+
+For triggers NOT listed with params above, the trigger object contains ONLY "type". Never invent param names.
+
+=== 3. BUTTON ACTIONS (use ONLY these; copy names exactly) ===
+Every button: {"label":"short label (max 30 chars)","action":"...","args":{...}}. "args" only where listed.
+- "open_app" — opens an app. args: EITHER {"slot":"music"} / {"slot":"video"} / {"slot":"chat"} / {"slot":"clock"} (opens the app the user chose for that purpose — PREFER slots), OR {"package":"com.example.app"} (one exact app), OR {"kind":"music"} (any music app).
+- "open_url" — opens a link. args: {"url":"https://..."} REQUIRED.
+- "open_app_info" — opens an app's system App Info page (for clearing cache / uninstall nudges). args: {"package":"com.example.app"} REQUIRED.
+- "open_whatsapp_chat" — opens WhatsApp; optional args {"number":"919999999999"} opens a chat with that number. No args = just opens WhatsApp.
+- "lock_phone" — locks the phone immediately. No args. (Works only if the user enabled Device Admin.)
+- "go_home" — sends the user to the Home screen (the "close app / take a break" effect). No args.
+- "open_clock" — opens the user's Clock app so he can set an alarm himself. No args. (There is NO automatic alarm-setting action — never try to set alarms.)
+- "set_volume" — sets the MEDIA (music/video) volume. args: {"percent": number 0-100} REQUIRED. Example: 25 = quiet and safe for ears, 50 = half, 0 = silent.
+- "set_brightness" — sets screen brightness. args: {"percent": number 0-100} REQUIRED. Example: 20 = dim for night, 70 = bright for outdoors. (Needs a system permission the user grants in the Setup Wizard; if not granted, the app politely tells the user — the button is still correct to generate.)
+- "skip" — dismisses the notification, does nothing else. No args. Almost every workflow should end with ONE skip button (label ideas: "Skip", "Thik hai", "Baad me").
+
+FORBIDDEN (do NOT use — the app rejects them): set_alarm, set_reminder, input_text, jump, delete_file, assign_group, kill_app, or any other name you invent.
+
+=== 4. BOT RULE (buttons count) ===
+- 1 to 3 buttons -> "bot_type":"notification".
+- Exactly 4 buttons -> "bot_type":"popup" (the app shows a popup card instead of a notification).
+- Never more than 4 buttons. Prefer 2-3.
+
+=== 5. SETTINGS MAP ===
+"settings" holds the workflow's editable numeric limits so Boss can change them later in the app. Allowed keys ONLY: "minutes", "hours", "level", "cache_mb" (10-5000), "days" (1-365), "cooldown_minutes" (1-1440; minimum gap between two firings), "after_minutes" (rarely needed).
+- MIRROR the main limit here: e.g. trigger minutes 45 -> settings {"minutes":45}; app_hopping -> add {"cooldown_minutes":45}.
+- For "cache_over" and "unused_apps" the limit lives ONLY in settings (cache_mb / days) — it is REQUIRED there.
+
+=== 6. VARIABLES (only inside message.title / message.text) ===
+Use ONLY the variables listed for that trigger in section 2: {app}, {minutes}, {percent}, {cache}, {text}, {name}, {count}. Write them exactly like {app}. Any other {placeholder} (e.g. {group}, {time}, {date}) is NOT supported and would be shown literally — never use them.
+
+=== 7. VOICE (message.title / message.text) ===
+- Language: Hinglish — Roman Hindi mixed with common English words (like: "Boss, aapne {app} bahut der chala liya").
+- Tone: respectful "aap", caring like a friend/family member. Address the user as "Boss" in the text (usually at the start or end).
+- Friendly scolding is welcome for study/health habits (e.g. "aise chalega to exam kaise clear hoga?"), never abusive, never frightening.
+- Title: ONE short line (max 80 chars). Text: 1-2 short lines (max 400 chars). Emojis: at most 1-2, only if natural.
+- The title/text must make sense with the trigger and use its variables where natural.
+
+=== 8. EXAMPLES (follow this quality and shape) ===
+
+Example A — daily time reminder:
+{"id":"night_water_reminder","name":"Raat Paani Reminder","enabled":true,"bot_type":"notification","trigger":{"type":"time","time":"22:00"},"message":{"title":"Paani pi lo, Boss 💧","text":"Sone se pehle ek glass paani pi lijiye, Boss. Sehat bani rahegi aur neend bhi achhi aayegi."},"buttons":[{"label":"Pi liya","action":"skip"}],"steps":[],"settings":{}}
+
+Example B — usage limit with friendly scolding:
+{"id":"long_app_daant","name":"Zyada App Chalane par Daant","enabled":true,"bot_type":"notification","trigger":{"type":"single_app_over","minutes":45},"message":{"title":"Bas karo, Boss ⚠️","text":"Aap {app} pichhle {minutes} minute se chala rahe hain. Padhai ka time kharab ho raha hai — thoda break lijiye, warna exam kaise clear hoga?"},"buttons":[{"label":"Home jao","action":"go_home"},{"label":"Phone lock karo","action":"lock_phone"},{"label":"Skip","action":"skip"}],"steps":[],"settings":{"minutes":45}}
+
+Example C — music volume safety with set_volume:
+{"id":"music_volume_safety","name":"Music Volume Safety","enabled":true,"bot_type":"notification","trigger":{"type":"single_app_over","minutes":1},"message":{"title":"Volume Alert 🎧","text":"Boss, music app khul gaya hai. Kaanon ki safety ke liye volume 25% kar dun? Tez awaaz lambe samay me kaan kharab karti hai."},"buttons":[{"label":"Volume 25% karo","action":"set_volume","args":{"percent":25}},{"label":"Skip","action":"skip"}],"steps":[],"settings":{"minutes":1}}
+
+=== 9. USER'S REQUEST ===
 "$description"
 """.trimIndent()
     }
@@ -272,6 +356,25 @@ User's workflow description:
                         st = if (lv != null && lv <= 30) "discharging" else "charging"
                     }
                     trigger.put("state", st)
+                }
+                "packages" -> {
+                    // notification_posted: comma-wali package list —
+                    // sirf sahi package naam hi rehne do; khaali list
+                    // ka matlab "sab apps" hai, isliye key hi gira do
+                    val pkgs = triggerRaw.optString("packages")
+                        .split(",").map { it.trim() }
+                        .filter { PACKAGE_RE.matches(it) }
+                        .take(10)
+                    if (pkgs.isNotEmpty()) {
+                        trigger.put("packages", pkgs.joinToString(","))
+                    }
+                }
+                "keyword" -> {
+                    // notification_posted: ek shabd/vakyaansh; bahut
+                    // lamba ya khaali ho to key hi gira do (bina
+                    // keyword ke trigger har notification par chalega)
+                    val kw = triggerRaw.optString("keyword").trim().take(50)
+                    if (kw.isNotEmpty()) trigger.put("keyword", kw)
                 }
                 else -> {
                     val (_, _, def) = clampFor(key)
@@ -363,6 +466,13 @@ User's workflow description:
             }
             val number = argsRaw.optString("number").filter { it.isDigit() || it == '+' }
             if (number.isNotEmpty()) args.put("number", number.take(20))
+            // 0.2.6: percent sirf set_volume / set_brightness ke liye (0-100)
+            if (action == "set_volume" || action == "set_brightness") {
+                val pct = numeric(argsRaw.opt("percent"))
+                if (pct != null) {
+                    args.put("percent", pct.coerceIn(0, 100).toString())
+                }
+            }
         }
         // Action ke hisaab se zaroori args na hon to button ka koi matlab nahi
         when (action) {
@@ -371,6 +481,8 @@ User's workflow description:
             ) return null
             "open_url" -> if (!args.has("url")) return null
             "open_app_info" -> if (!args.has("package")) return null
+            "set_volume", "set_brightness" ->
+                if (!args.has("percent")) return null
         }
         if (args.length() > 0) out.put("args", args)
         return out

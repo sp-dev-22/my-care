@@ -182,7 +182,7 @@ object NotifyFactory {
         }
 
         manager(context)?.notify(notifId, builder.build())
-        LogStore.log(context, "STEP ${wf.id} → ${step.id} — $title")
+        LogStore.log(context, "STEP ${wf.id} -> ${step.id} — $title")
     }
 
     /** Chhoti si plain notification — confirmation ya jaankari ke liye. */

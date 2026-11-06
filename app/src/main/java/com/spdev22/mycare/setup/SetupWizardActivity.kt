@@ -16,6 +16,7 @@ import android.widget.TextView
 import android.widget.Toast
 import com.spdev22.mycare.engine.UsageTracker
 import com.spdev22.mycare.receiver.CareDeviceAdminReceiver
+import com.spdev22.mycare.service.CareNotificationListener
 import com.spdev22.mycare.ui.UiKit
 
 /**
@@ -26,6 +27,9 @@ import com.spdev22.mycare.ui.UiKit
  * 0.2.4: Usage Access ki LIVE sthiti bhi dikhti hai — mili hai
  * ya nahi — kyunki bina iske Cache Safai jaise checks chup-chaap
  * band rehte the aur user ko wajah pata hi nahi chalti thi.
+ * 0.2.6: do naye SYSTEM-LEVEL kadam — 9. WRITE_SETTINGS (brightness
+ * action ke liye) aur 10. Notification Access (notification_posted
+ * trigger ke liye) — dono ki bhi LIVE sthiti dikhti hai.
  */
 class SetupWizardActivity : Activity() {
 
@@ -191,6 +195,47 @@ class SetupWizardActivity : Activity() {
             val i = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
             i.data = Uri.parse("package:" + a.packageName)
             a.startActivity(i)
+        },
+        PermItem(
+            "9. System Settings (Brightness badalna)",
+            "0.2.6 ke set_brightness button ke liye — jaise raat ko screen " +
+                "ki chamak kam karne wala workflow. Yeh ek khaas SYSTEM-LEVEL " +
+                "ijaazat hai: khulne wali screen par My Care ko 'Allow " +
+                "modifying system settings' ON karna hoga. Bina iske " +
+                "brightness wale buttons sirf suchna denge, kaam nahi karenge.",
+            statusText = {
+                if (Settings.System.canWrite(this@SetupWizardActivity)) {
+                    "Sthiti: MILI HAI ✓ — set_brightness wale buttons kaam karenge."
+                } else {
+                    "Sthiti: NAHI MILI ✗ — set_brightness wale buttons abhi " +
+                        "brightness nahi badal sakte. Neeche wala button dabakar " +
+                        "My Care ko yeh ijaazat de dein."
+                }
+            }
+        ) { a ->
+            val i = Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS)
+            i.data = Uri.parse("package:" + a.packageName)
+            a.startActivity(i)
+        },
+        PermItem(
+            "10. Notification Access",
+            "0.2.6 ke notification_posted trigger ke liye — doosre apps ki " +
+                "notifications par workflow chalana (jaise kisi khaas app ka " +
+                "message aate hi yaad dilana). Khulne wali screen me My Care " +
+                "ko ON karein. Pakki baat: My Care kisi notification ka text " +
+                "kabhi save nahi karta — sirf matching par workflow bajta hai, " +
+                "aur iske bina yeh trigger poori tarah band rehta hai.",
+            statusText = {
+                if (CareNotificationListener.isAccessGranted(this@SetupWizardActivity)) {
+                    "Sthiti: MILI HAI ✓ — notification_posted wale workflows chal sakte hain."
+                } else {
+                    "Sthiti: NAHI MILI ✗ — notification_posted trigger abhi " +
+                        "BAND hai. Neeche wala button dabakar khulne wali list " +
+                        "me My Care ko ON kar dein."
+                }
+            }
+        ) { a ->
+            a.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
         }
     )
 }

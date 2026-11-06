@@ -106,10 +106,10 @@ class PopupActivity : Activity() {
             b.setOnClickListener {
                 val added = GroupStore.addPackageToGroup(this, g.name, pkg)
                 toast(
-                    if (added) "'$label' → '${g.name}' group me jud gaya"
+                    if (added) "'$label' -> '${g.name}' group me jud gaya"
                     else "'$label' pehle se is group me hai"
                 )
-                LogStore.log(this, "Naya app $pkg → group '${g.name}'")
+                LogStore.log(this, "Naya app $pkg -> group '${g.name}'")
                 finish()
             }
             root.addView(b)

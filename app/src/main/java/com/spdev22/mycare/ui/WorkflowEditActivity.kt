@@ -152,7 +152,10 @@ class WorkflowEditActivity : Activity() {
         if (packWf.buttons.isNotEmpty()) {
             fixedCard.addView(label("Buttons"))
             for (b in packWf.buttons) {
-                fixedCard.addView(UiKit.body(this, "• ${b.label} → ${b.action}"))
+                // 0.2.6 UI FIX: separator ASCII "->" hai. Unicode teer
+                // (U+2192) Infinix ke font me "'n" jaisa bigda hua dikhta
+                // tha — source sahi hote hue bhi screen kharab thi.
+                fixedCard.addView(UiKit.body(this, "• ${b.label} -> ${b.action}"))
             }
         }
         for (s in packWf.steps) {

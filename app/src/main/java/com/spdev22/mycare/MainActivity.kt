@@ -37,6 +37,8 @@ class MainActivity : Activity() {
 
     private lateinit var groupListView: ListView
     private lateinit var statusView: TextView
+    private lateinit var listCard: LinearLayout
+    private lateinit var groupsHint: TextView
     private var groups: MutableList<AppGroup> = mutableListOf()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -48,8 +50,9 @@ class MainActivity : Activity() {
             UiKit.subtitle(
                 this,
                 "Jo aapke phone ka aur aapka — dono ka khayal rakhe.\n" +
-                    "v0.2.5: saare 16 workflows zinda hain, aur ab Gemini AI se " +
-                    "apne workflows bhi ban sakte hain. Group par tap karke " +
+                    "v0.2.6: saare 16 workflows zinda hain, Gemini AI se apne " +
+                    "workflows bhi ban sakte hain — ab volume, brightness aur " +
+                    "doosre apps ki notifications par bhi. Group par tap karke " +
                     "uske apps chunein."
             )
         )
@@ -60,8 +63,11 @@ class MainActivity : Activity() {
 
         root.addView(UiKit.section(this, "Mere App Groups"))
 
-        // Groups ki list ek safed card ke andar
-        val listCard = UiKit.card(this).apply {
+        // Groups ki list ek safed card ke andar.
+        // 0.2.6 UI FIX: group na hon to card BILKUL nahi dikhta —
+        // pehle khaali safed dabba screen par latka rehta tha.
+        // Uski jagah ek halki si hint line aati hai (refreshGroups).
+        listCard = UiKit.card(this).apply {
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f
             )
@@ -76,6 +82,13 @@ class MainActivity : Activity() {
         }
         listCard.addView(groupListView)
         root.addView(listCard)
+
+        groupsHint = UiKit.small(
+            this,
+            "Abhi koi group nahi hai — pehla group banao, jaise Padhai " +
+                "ya Manoranjan. Group par tap karke usme apps jodein."
+        )
+        root.addView(groupsHint)
 
         val addBtn = UiKit.primaryButton(this, "+ Naya Group banao")
         addBtn.setOnClickListener { showAddGroupDialog() }
@@ -160,6 +173,15 @@ class MainActivity : Activity() {
 
     private fun refreshGroups() {
         groups = GroupStore.loadGroups(this)
+        if (groups.isEmpty()) {
+            // 0.2.6: khaali card gayab — sirf hint line (upar banayi gayi)
+            listCard.visibility = android.view.View.GONE
+            groupsHint.visibility = android.view.View.VISIBLE
+            groupListView.adapter = null
+            return
+        }
+        listCard.visibility = android.view.View.VISIBLE
+        groupsHint.visibility = android.view.View.GONE
         val labels = groups.map { g ->
             if (g.packages.isEmpty()) "${g.name}  •  0 apps"
             else "${g.name}  •  ${g.packages.size} apps"
@@ -167,9 +189,6 @@ class MainActivity : Activity() {
         groupListView.adapter = ArrayAdapter(
             this, android.R.layout.simple_list_item_1, labels
         )
-        if (groups.isEmpty()) {
-            toast("Pehla group banao — jaise Padhai, Manoranjan, Baatcheet")
-        }
     }
 
     private fun showAddGroupDialog() {
