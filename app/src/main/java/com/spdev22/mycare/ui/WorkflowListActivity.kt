@@ -6,10 +6,11 @@ import android.os.Bundle
 import android.view.Gravity
 import android.view.ViewGroup
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.Switch
+import android.widget.TextView
 import android.widget.Toast
 import com.spdev22.mycare.data.LogStore
-import com.spdev22.mycare.data.UserWorkflowStore
 import com.spdev22.mycare.data.WorkflowPrefs
 import com.spdev22.mycare.engine.Workflow
 import com.spdev22.mycare.engine.WorkflowEngine
@@ -26,83 +27,76 @@ import com.spdev22.mycare.notify.DailyScheduler
  *
  * Default sthiti pack ki apni `enabled` value hai; user ke toggle
  * karte hi override WorkflowPrefs me save ho jata hai.
- *
- * 0.2.5: list me pack ke saath user ke Gemini-se bane workflows bhi
- * hain (loadPack dono milakar deta hai) — unpar "✨ AI banaya" nishan
- * lagta hai. UiKit wala naya look: har workflow apne safed card me.
  */
 class WorkflowListActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val root = UiKit.root(this)
-        setContentView(UiKit.scroll(this, root))
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(40, 40, 40, 40)
+        }
+        val scroll = ScrollView(this)
+        scroll.addView(root)
+        setContentView(scroll)
 
-        root.addView(UiKit.title(this, "Workflows — On/Off"))
-        root.addView(
-            UiKit.subtitle(
-                this,
-                "Har workflow ko yahan se chalu/band karein, Boss. " +
-                    "Kisi workflow par TAP karke uska message, samay aur " +
-                    "limits bhi badal sakte hain (Editor-lite). " +
-                    "Jo OFF hai woh kabhi fire nahi hoga — roz wale time " +
-                    "workflows ka alarm bhi band ho jayega."
-            )
-        )
+        root.addView(TextView(this).apply {
+            text = "Workflows — On/Off"
+            textSize = 20f
+        })
+        root.addView(TextView(this).apply {
+            text = "Har workflow ko yahan se chalu/band karein, Boss. " +
+                "Kisi workflow par TAP karke uska message, samay aur " +
+                "limits bhi badal sakte hain (Editor-lite). " +
+                "Jo OFF hai woh kabhi fire nahi hoga — roz wale time " +
+                "workflows ka alarm bhi band ho jayega."
+            setPadding(0, 8, 0, 16)
+        })
 
         val workflows = WorkflowEngine.loadPack(this)
         if (workflows.isEmpty()) {
-            val card = UiKit.card(this)
-            card.addView(UiKit.body(this, "Pack load nahi hua — koi workflow nahi mila.", 16f))
-            root.addView(card)
+            root.addView(TextView(this).apply {
+                text = "Pack load nahi hua — koi workflow nahi mila."
+                textSize = 16f
+            })
             return
         }
         for (wf in workflows) {
             root.addView(workflowRow(wf))
         }
 
-        root.addView(
-            UiKit.small(
-                this,
-                "Note: Switch ki sthiti aapki apni hai — pack update " +
-                    "hone par bhi aapke On/Off waise hi rahenge. " +
-                    "✨ AI banaya = Gemini se bana aapka apna workflow; " +
-                    "use edit screen se delete bhi kar sakte hain."
-            )
-        )
+        root.addView(TextView(this).apply {
+            text = "\nNote: Switch ki sthiti aapki apni hai — pack update " +
+                "hone par bhi aapke On/Off waise hi rahenge."
+            setPadding(0, 20, 0, 0)
+        })
     }
 
     private fun workflowRow(wf: Workflow): LinearLayout {
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            background = UiKit.cardBackground(this@WorkflowListActivity)
-            val p = UiKit.dp(this@WorkflowListActivity, 14)
-            setPadding(p, p, p, p)
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply {
-                bottomMargin = UiKit.dp(this@WorkflowListActivity, 10)
-            }
+            )
+            setPadding(0, 10, 0, 10)
         }
 
         val texts = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         }
-        val isAi = UserWorkflowStore.contains(this, wf.id)
-        texts.addView(UiKit.body(this, wf.name + if (isAi) "  ✨ AI banaya" else "", 16f).apply {
-            typeface = android.graphics.Typeface.DEFAULT_BOLD
+        texts.addView(TextView(this).apply {
+            text = wf.name
+            textSize = 16f
         })
         val steps = if (wf.steps.isEmpty()) "" else " • ${wf.steps.size} extra steps"
-        texts.addView(
-            UiKit.small(
-                this,
-                "trigger: ${wf.triggerType} • bot: ${wf.effectiveBotType}$steps • tap = edit ✏️"
-            )
-        )
+        texts.addView(TextView(this).apply {
+            text = "trigger: ${wf.triggerType} • bot: ${wf.effectiveBotType}$steps • tap = edit ✏️"
+            textSize = 13f
+        })
         row.addView(texts)
 
         val toggle = Switch(this).apply {
@@ -110,7 +104,6 @@ class WorkflowListActivity : Activity() {
             // purani value par bekaar ka event na fire ho jaye
             setOnCheckedChangeListener(null)
             isChecked = WorkflowPrefs.isEnabled(this@WorkflowListActivity, wf)
-            UiKit.tintSwitch(this@WorkflowListActivity, this)
             setOnCheckedChangeListener { _, checked ->
                 WorkflowPrefs.setEnabled(this@WorkflowListActivity, wf.id, checked)
                 if (wf.triggerType == "time") {

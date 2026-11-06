@@ -1,7 +1,6 @@
 package com.spdev22.mycare.ui
 
 import android.app.Activity
-import android.app.AlertDialog
 import android.app.TimePickerDialog
 import android.os.Bundle
 import android.text.InputType
@@ -13,9 +12,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import com.spdev22.mycare.data.LogStore
-import com.spdev22.mycare.data.UserWorkflowStore
 import com.spdev22.mycare.data.WorkflowOverrides
-import com.spdev22.mycare.data.WorkflowPrefs
 import com.spdev22.mycare.engine.Workflow
 import com.spdev22.mycare.engine.WorkflowEngine
 import com.spdev22.mycare.notify.DailyScheduler
@@ -32,10 +29,6 @@ import com.spdev22.mycare.notify.DailyScheduler
  *
  * Samay badalte hi us workflow ka roz wala alarm DailyScheduler
  * se turant taaza set ho jata hai.
- *
- * 0.2.5: UiKit wala naya look. Saath me — user ke APNE (Gemini-se
- * bane) workflows ke liye yahan DELETE button bhi hai; pack ke
- * workflows delete nahi hote (woh app ke saath aate hain).
  */
 class WorkflowEditActivity : Activity() {
 
@@ -57,38 +50,41 @@ class WorkflowEditActivity : Activity() {
         packWf = found
         val eff = WorkflowOverrides.effective(this, packWf)
 
-        val root = UiKit.root(this)
-        setContentView(UiKit.scroll(this, root))
-
-        root.addView(UiKit.title(this, "✏️ ${packWf.name}"))
-        root.addView(
-            UiKit.subtitle(
-                this,
-                "Message, samay aur limits yahan badlein, Boss. Pack " +
-                    "waise ka waisa rahega — aapki edits uske upar ek layer " +
-                    "ki tarah lagu hongi, aur reset kabhi bhi ho sakta hai."
-            )
-        )
-        if (WorkflowOverrides.hasOverrides(this, packWf.id)) {
-            root.addView(UiKit.small(this, "✏️ Is workflow par aapke custom edits lagu hain."))
-            root.addView(UiKit.gap(this, 4))
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(40, 40, 40, 40)
         }
-        val isUserWorkflow = UserWorkflowStore.contains(this, packWf.id)
-        if (isUserWorkflow) {
-            root.addView(UiKit.small(this, "✨ Yeh aapka apna (AI se banaya) workflow hai — neeche se delete bhi ho sakta hai."))
-            root.addView(UiKit.gap(this, 4))
+        val scroll = ScrollView(this)
+        scroll.addView(root)
+        setContentView(scroll)
+
+        root.addView(TextView(this).apply {
+            text = "✏️ ${packWf.name}"
+            textSize = 20f
+        })
+        root.addView(TextView(this).apply {
+            text = "Message, samay aur limits yahan badlein, Boss. Pack " +
+                "waise ka waisa rahega — aapki edits uske upar ek layer " +
+                "ki tarah lagu hongi, aur reset kabhi bhi ho sakta hai."
+            setPadding(0, 8, 0, 8)
+        })
+        if (WorkflowOverrides.hasOverrides(this, packWf.id)) {
+            root.addView(TextView(this).apply {
+                text = "✏️ Is workflow par aapke custom edits lagu hain."
+                setPadding(0, 0, 0, 8)
+            })
         }
 
         // ---------- Message ----------
         section(root, "Message")
         root.addView(label("Title"))
-        titleInput = UiKit.input(this, "Title").apply {
+        titleInput = EditText(this).apply {
             setText(eff.title)
             setSingleLine(true)
         }
         root.addView(titleInput)
         root.addView(label("Text"))
-        textInput = UiKit.input(this, "Text").apply {
+        textInput = EditText(this).apply {
             setText(eff.text)
             setSingleLine(false)
             minLines = 3
@@ -101,7 +97,10 @@ class WorkflowEditActivity : Activity() {
         if (packWf.triggerType == "time" && packTime != null) {
             section(root, "Samay (roz ka time)")
             chosenTime = eff.triggerParams["time"] ?: packTime
-            val timeBtn = UiKit.secondaryButton(this, "⏰ $chosenTime — badalne ke liye tap karein")
+            val timeBtn = Button(this).apply {
+                text = "⏰ $chosenTime — badalne ke liye tap karein"
+                layoutParams = matchWrap()
+            }
             timeBtn.setOnClickListener {
                 val parts = (chosenTime ?: packTime).split(":")
                 val h = parts.getOrNull(0)?.toIntOrNull() ?: 8
@@ -113,9 +112,12 @@ class WorkflowEditActivity : Activity() {
             }
             root.addView(timeBtn)
             if (packWf.triggerParams.containsKey("settings_key")) {
-                root.addView(UiKit.small(this, "Note: yeh is workflow ka apna samay hai — " +
-                    "Settings screen wale samay se upar yahi chalega. " +
-                    "Reset karne par Settings wala samay wapas lagu hoga."))
+                root.addView(TextView(this).apply {
+                    text = "Note: yeh is workflow ka apna samay hai — " +
+                        "Settings screen wale samay se upar yahi chalega. " +
+                        "Reset karne par Settings wala samay wapas lagu hoga."
+                    setPadding(0, 4, 0, 0)
+                })
             }
         }
 
@@ -125,7 +127,7 @@ class WorkflowEditActivity : Activity() {
             section(root, "Limits")
             for (key in numericKeys) {
                 root.addView(label(labelFor(key)))
-                val et = UiKit.input(this, labelFor(key)).apply {
+                val et = EditText(this).apply {
                     setText(eff.triggerParams[key] ?: eff.settings[key] ?: "")
                     setSingleLine(true)
                     inputType = InputType.TYPE_CLASS_NUMBER
@@ -137,7 +139,6 @@ class WorkflowEditActivity : Activity() {
 
         // ---------- Fixed jaankari (read-only) ----------
         section(root, "Fixed cheezein (badal nahi sakti)")
-        val fixedCard = UiKit.card(this)
         val fixed = StringBuilder()
         fixed.append("Trigger: ${packWf.triggerType}")
         for ((k, v) in packWf.triggerParams) {
@@ -148,58 +149,35 @@ class WorkflowEditActivity : Activity() {
         if (packWf.primaryAction != null) {
             fixed.append("\nAction: ${packWf.primaryAction}")
         }
-        fixedCard.addView(UiKit.body(this, fixed.toString()))
+        root.addView(TextView(this).apply { text = fixed.toString() })
         if (packWf.buttons.isNotEmpty()) {
-            fixedCard.addView(label("Buttons"))
+            root.addView(label("Buttons"))
             for (b in packWf.buttons) {
-                fixedCard.addView(UiKit.body(this, "• ${b.label} → ${b.action}"))
+                root.addView(TextView(this).apply {
+                    text = "• ${b.label} → ${b.action}"
+                })
             }
         }
         for (s in packWf.steps) {
-            fixedCard.addView(UiKit.body(this, "Step '${s.id}': ${s.title}"))
+            root.addView(TextView(this).apply {
+                text = "Step '${s.id}': ${s.title}"
+            })
         }
-        root.addView(fixedCard)
 
         // ---------- Save / Reset ----------
-        root.addView(UiKit.gap(this, 6))
-        val saveBtn = UiKit.primaryButton(this, "Save karo")
+        val saveBtn = Button(this).apply {
+            text = "Save karo"
+            layoutParams = matchWrap()
+        }
         saveBtn.setOnClickListener { save() }
         root.addView(saveBtn)
 
-        val resetBtn = UiKit.secondaryButton(this, "Pack default par reset")
+        val resetBtn = Button(this).apply {
+            text = "Pack default par reset"
+            layoutParams = matchWrap()
+        }
         resetBtn.setOnClickListener { resetAll() }
         root.addView(resetBtn)
-
-        // ---------- Delete (sirf user ke apne workflows) ----------
-        if (isUserWorkflow) {
-            section(root, "Apna workflow hatayein")
-            val delBtn = UiKit.dangerButton(this, "🗑️ Yeh workflow delete karo")
-            delBtn.setOnClickListener { confirmDelete() }
-            root.addView(delBtn)
-        }
-    }
-
-    /** User ke apne workflow ko pakki taur par hatana — pucca karke. */
-    private fun confirmDelete() {
-        AlertDialog.Builder(this)
-            .setTitle("Workflow delete karein?")
-            .setMessage(
-                "'${packWf.name}' hamesha ke liye hat jayega, Boss. " +
-                    "Uske saare edits aur On/Off sthiti bhi saaf ho jayegi."
-            )
-            .setPositiveButton("Delete") { _, _ ->
-                if (packWf.triggerType == "time") {
-                    DailyScheduler.cancelOne(this, packWf)
-                }
-                UserWorkflowStore.delete(this, packWf.id)
-                WorkflowOverrides.reset(this, packWf.id)
-                WorkflowPrefs.clearOverride(this, packWf.id)
-                LogStore.log(this, "User workflow [${packWf.id}] delete hua (Editor)")
-                toast("Workflow delete ho gaya, Boss")
-                finish()
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
     }
 
     /**
@@ -299,10 +277,23 @@ class WorkflowEditActivity : Activity() {
     // ---------- chhote UI helpers ----------
 
     private fun section(root: LinearLayout, title: String) {
-        root.addView(UiKit.section(this, title))
+        root.addView(TextView(this).apply {
+            text = title
+            textSize = 17f
+            setPadding(0, 22, 0, 6)
+        })
     }
 
-    private fun label(text: String): TextView = UiKit.label(this, text)
+    private fun label(text: String): TextView = TextView(this).apply {
+        this.text = text
+        textSize = 13f
+        setPadding(0, 10, 0, 2)
+    }
+
+    private fun matchWrap() = LinearLayout.LayoutParams(
+        ViewGroup.LayoutParams.MATCH_PARENT,
+        ViewGroup.LayoutParams.WRAP_CONTENT
+    )
 
     private fun toast(msg: String) =
         Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
